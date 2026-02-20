@@ -1,6 +1,6 @@
 # Logyard
 
-A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies.
+A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies. Accepts both RFC 3164 (BSD) and RFC 5424 syslog messages over UDP and TCP.
 
 ## Build
 
@@ -74,6 +74,43 @@ Each rule matches on all specified fields (AND). Multiple rules are OR'd. Ignore
 ## Web UI
 
 Open `http://localhost:8080`. Auto-refreshes every 3 seconds. Filter by host, facility, severity, tag, or free-text search.
+
+Logyard does not provide authentication or TLS. Use a reverse proxy like [Caddy](https://caddyserver.com/) for HTTPS and access control.
+
+## Docker
+
+```shell
+docker build -t logyard .
+docker run -d \
+  -v ./config.yaml:/data/config.yaml \
+  -v logyard-data:/data \
+  -p 514:514/udp \
+  -p 514:514/tcp \
+  -p 8080:8080 \
+  --name logyard \
+  --restart unless-stopped \
+  logyard
+```
+
+Or with docker compose:
+
+```yaml
+services:
+  logyard:
+    build: .
+    container_name: logyard
+    volumes:
+      - ./config.yaml:/data/config.yaml
+      - logyard-data:/data
+    ports:
+      - "514:514/udp"
+      - "514:514/tcp"
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  logyard-data:
+```
 
 ## Systemd
 
