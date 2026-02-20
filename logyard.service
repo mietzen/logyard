@@ -1,0 +1,14 @@
+[Unit]
+Description=Logyard - Syslog Aggregator
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/logyard -config /etc/logyard/config.yaml
+WorkingDirectory=/var/lib/logyard
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
