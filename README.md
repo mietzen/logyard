@@ -80,7 +80,6 @@ Logyard does not provide authentication or TLS. Use a reverse proxy like [Caddy]
 ## Docker
 
 ```shell
-docker build -t logyard .
 docker run -d \
   -v ./config.yaml:/data/config.yaml \
   -v logyard-data:/data \
@@ -89,7 +88,7 @@ docker run -d \
   -p 8080:8080 \
   --name logyard \
   --restart unless-stopped \
-  logyard
+  mietzen/logyard:latest
 ```
 
 Or with docker compose:
@@ -97,7 +96,7 @@ Or with docker compose:
 ```yaml
 services:
   logyard:
-    build: .
+    image: mietzen/logyard:latest
     container_name: logyard
     volumes:
       - ./config.yaml:/data/config.yaml

@@ -67,7 +67,7 @@ echo "<12>1 ${RFC5424_TS} rfc5424host myapp 1234 - - RFC5424 warning test" | nc 
 sleep 2
 
 echo "=== Checking database ==="
-docker exec logyard-test sh -c 'apk add --no-cache sqlite >/dev/null 2>&1; sqlite3 /data/test-logyard.db "SELECT * FROM logs;"'
+docker exec logyard-test sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1; sqlite3 /data/test-logyard.db "SELECT * FROM logs;"'
 COUNT=$(docker exec logyard-test sh -c 'sqlite3 /data/test-logyard.db "SELECT count(*) FROM logs;"')
 echo "Log count: $COUNT"
 if [ "$COUNT" -lt 2 ]; then
