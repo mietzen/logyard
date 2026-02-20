@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logyard</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 13px; }
+    h1 { padding: 12px 16px; background: #16213e; border-bottom: 1px solid #0f3460; font-size: 18px; }
+    .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
+    .filters input, .filters select { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
+    .filters input:focus, .filters select:focus { outline: none; border-color: #e94560; }
+    .filters button { background: #e94560; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    .filters button:hover { background: #c73652; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { position: sticky; top: 0; background: #16213e; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; }
+    td { padding: 4px 10px; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 600px; }
+    td:last-child { white-space: normal; max-width: none; }
+    tr:hover { background: #16213e; }
+    .sev-emerg, .sev-alert { background: #4a0000; color: #ff4444; }
+    .sev-crit { background: #3a0000; color: #ff6666; }
+    .sev-err { color: #ff8888; }
+    .sev-warning { color: #ffcc00; }
+    .sev-notice { color: #66ccff; }
+    .sev-info { color: #e0e0e0; }
+    .sev-debug { color: #888888; }
+    .indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .htmx-request .indicator { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  </style>
+</head>
+<body>
+  <h1><span class="indicator" style="background:#4caf50"></span>Logyard</h1>
+  <form class="filters"
+        hx-get="/api/logs"
+        hx-trigger="submit, every 3s"
+        hx-target="#log-body"
+        hx-swap="innerHTML"
+        hx-indicator="find .indicator">
+    <input name="host" placeholder="Host" autocomplete="off">
+    <input name="facility" placeholder="Facility" autocomplete="off">
+    <select name="severity">
+      <option value="">All severities</option>
+      <option value="emerg">emerg</option>
+      <option value="alert">alert</option>
+      <option value="crit">crit</option>
+      <option value="err">err</option>
+      <option value="warning">warning</option>
+      <option value="notice">notice</option>
+      <option value="info">info</option>
+      <option value="debug">debug</option>
+    </select>
+    <input name="tag" placeholder="Tag" autocomplete="off">
+    <input name="search" placeholder="Search message..." autocomplete="off" style="flex:1;min-width:200px">
+    <button type="submit">Filter</button>
+  </form>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Host</th>
+        <th>Facility</th>
+        <th>Severity</th>
+        <th>Tag</th>
+        <th>Message</th>
+      </tr>
+    </thead>
+    <tbody id="log-body"
+           hx-get="/api/logs"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+    </tbody>
+  </table>
+</body>
+</html>
