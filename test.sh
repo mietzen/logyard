@@ -55,7 +55,8 @@ docker run -d --name logyard-test --network logyard-testnet \
 sleep 2
 
 echo "=== Sending syslog message (UDP) ==="
-echo '<12>Feb 20 12:00:00 testhost myapp: this is a warning test message' | nc -u -w1 127.0.0.1 1514
+SYSLOG_TS=$(date -u '+%b %d %H:%M:%S')
+echo "<12>${SYSLOG_TS} testhost myapp: this is a warning test message" | nc -u -w1 127.0.0.1 1514
 sleep 2
 
 echo "=== Checking database ==="
@@ -70,6 +71,9 @@ echo "PASS: Log stored"
 
 echo "=== Waiting for alert evaluation ==="
 sleep 5
+
+echo "=== Logyard logs ==="
+docker logs logyard-test
 
 echo "=== Checking mailpit for alert email ==="
 MAIL_RESPONSE=$(docker exec mailpit-test wget -qO- http://localhost:8025/api/v1/messages)
