@@ -1,0 +1,34 @@
+# Logyard configuration
+
+# db_path: ./logyard.db
+# retention: 14  # days
+
+# listen:
+#   udp: ":514"
+#   tcp: ":514"
+
+# web_addr: ":8080"
+
+smtp:
+  host: smtp.example.com
+  port: 587
+  user: alerts@example.com
+  password: secret
+  from: alerts@example.com
+  to: admin@example.com
+
+alerts:
+  - name: "Many warnings"
+    count: 10
+    window_minutes: 5
+    level: warning
+  - name: "Any critical"
+    count: 1
+    window_minutes: 5
+    level: crit
+
+ignore:
+  - host: noisy-box.lan
+  - facility: kern
+  - host: proxmox
+    level: warning
