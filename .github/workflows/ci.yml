@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build
+        run: CGO_ENABLED=1 go build -o logyard .
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ncat sqlite3
+          # Install mailpit (local SMTP server with REST API)
+          curl -sL https://raw.githubusercontent.com/axllent/mailpit/develop/install.sh | sudo bash
+
+      - name: Write test config
+        run: |
+          cat > test-config.yaml << 'YAML'
+          db_path: ./test-logyard.db
+          retention: 1
+
+          listen:
+            udp: ":1514"
+            tcp: ":1514"
+
+          web_addr: ":8080"
+
+          smtp:
+            host: 127.0.0.1
+            port: 1025
+            from: alerts@test.local
+            to: admin@test.local
+
+          alerts:
+            - name: "test-warning-alert"
+              count: 1
+              window_minutes: 5
+              level: warning
+          YAML
+
+      - name: Start mailpit
+        run: |
+          mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025 &
+          sleep 1
+
+      - name: Start logyard
+        run: |
+          ./logyard -config test-config.yaml -alert-interval 3s &
+          sleep 2
+
+      - name: Send syslog message (UDP)
+        run: |
+          # Priority 12 = facility 1 (user), severity 4 (warning)
+          echo '<12>Feb 20 12:00:00 testhost myapp: this is a warning test message' | ncat -u -w1 127.0.0.1 1514
+          sleep 2
+
+      - name: Verify log stored in DB
+        run: |
+          count=$(sqlite3 test-logyard.db "SELECT count(*) FROM logs;")
+          echo "Log count: $count"
+          if [ "$count" -lt 1 ]; then
+            echo "FAIL: No logs found in database"
+            sqlite3 test-logyard.db "SELECT * FROM logs;"
+            exit 1
+          fi
+          echo "PASS: Log entry stored"
+          sqlite3 test-logyard.db "SELECT * FROM logs;"
+
+      - name: Wait for alert evaluation
+        run: sleep 5
+
+      - name: Verify alert email sent
+        run: |
+          # Query mailpit REST API for received messages
+          response=$(curl -s http://127.0.0.1:8025/api/v1/messages)
+          msg_count=$(echo "$response" | jq '.messages_count')
+          echo "Email count: $msg_count"
+          if [ "$msg_count" -lt 1 ]; then
+            echo "FAIL: No alert email received"
+            echo "$response" | jq .
+            exit 1
+          fi
+          echo "PASS: Alert email received"
+          echo "$response" | jq '.messages[0].Subject'
+
+      - name: Verify web UI responds
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
+          echo "Web UI status: $status"
+          if [ "$status" != "200" ]; then
+            echo "FAIL: Web UI not responding"
+            exit 1
+          fi
+
+          # Check API returns log rows
+          body=$(curl -s http://127.0.0.1:8080/api/logs)
+          echo "API response:"
+          echo "$body"
+          if ! echo "$body" | grep -q "testhost"; then
+            echo "FAIL: Log entry not found in API response"
+            exit 1
+          fi
+          echo "PASS: Web UI and API working"
