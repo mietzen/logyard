@@ -4,7 +4,7 @@ A lightweight syslog aggregator with web UI and email alerting. Single Go binary
 
 ## Build
 
-Requires Go 1.22+ and CGO (for SQLite).
+Requires Go 1.25+ and CGO (for SQLite).
 
 ```shell
 CGO_ENABLED=1 go build -o logyard .
