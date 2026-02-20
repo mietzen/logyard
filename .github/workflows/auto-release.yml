@@ -6,7 +6,7 @@ on:
 
 jobs:
   auto-release:
-    if: github.event.pull_request.merged == true && github.event.pull_request.user.login == 'dependabot[bot]' && (contains(github.event.pull_request.labels.*.name, 'docker') || contains(github.event.pull_request.labels.*.name, 'go'))
+    if: github.event.pull_request.merged == true && github.event.pull_request.user.login == 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'go')
 
     name: "Auto Release"
     runs-on: "ubuntu-24.04"
@@ -17,25 +17,15 @@ jobs:
           fetch-depth: 0
       - name: Get Version
         id: get-version
-        env:
-          HAS_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'docker') }}
-          HAS_GO_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'go') }}
         run: |
           LATEST_TAG=$(curl -s "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r '.name')
           URL='https://gist.githubusercontent.com/mietzen/cd33efb65f91619201a45ac50dcfc29e/raw/bump-version'
-          if [[ "$HAS_DOCKER_LABEL" == 'true' ]]; then
-            echo "version=v$(wget -qO - ${URL} | bash -s ${LATEST_TAG} bug)" >> $GITHUB_OUTPUT
-          elif [[ "$HAS_GO_LABEL" == 'true' ]]; then
-            echo "version=v$(wget -qO - ${URL} | bash -s ${LATEST_TAG} minor)" >> $GITHUB_OUTPUT
-          else
-            echo "Unknown trigger"
-            exit 1
-          fi
+          echo "version=v$(wget -qO - ${URL} | bash -s ${LATEST_TAG} minor)" >> $GITHUB_OUTPUT
       - uses: actions/create-github-app-token@v2
         id: generate-token
         with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID_MERGE }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY_MERGE }}
       - name: Create Release
         run: gh release create ${{ steps.get-version.outputs.version }} --generate-notes
         env:

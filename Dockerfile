@@ -1,11 +1,11 @@
-FROM golang:1.25-bookworm AS build
+FROM golang:1.25-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=1 go build -o /logyard .
 
-FROM debian:bookworm-slim
+FROM debian:trixie-20260202-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*

@@ -20,8 +20,8 @@ jobs:
       - uses: actions/create-github-app-token@v2
         id: generate-token
         with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID_MERGE }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY_MERGE }}
       - name: Enable Pull Request Automerge
         run: gh pr merge --squash --auto "${{ github.event.pull_request.number }}"
         env:
