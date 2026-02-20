@@ -48,6 +48,15 @@ func StartWeb(addr string, db *sql.DB) error {
 		w.Write(htmxJS)
 	})
 
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(); err != nil {
+			http.Error(w, "db unhealthy", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		filter := LogFilter{
