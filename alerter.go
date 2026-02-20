@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"net/smtp"
 	"strings"
 	"time"
@@ -98,10 +100,52 @@ func sendAlert(cfg SMTPConfig, rule AlertRule, count int) error {
 	}, "\r\n")
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	var auth smtp.Auth
-	if cfg.User != "" {
-		auth = smtp.PlainAuth("", cfg.User, cfg.Password, cfg.Host)
+
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("dial %s: %w", addr, err)
 	}
 
-	return smtp.SendMail(addr, auth, cfg.From, []string{cfg.To}, []byte(msg))
+	client, err := smtp.NewClient(conn, cfg.Host)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Close()
+
+	// Try STARTTLS if available, skip certificate verification
+	// so self-signed certs (e.g. mailpit) work.
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		tlsCfg := &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: true}
+		if err := client.StartTLS(tlsCfg); err != nil {
+			return fmt.Errorf("starttls: %w", err)
+		}
+	}
+
+	if cfg.User != "" {
+		auth := smtp.PlainAuth("", cfg.User, cfg.Password, cfg.Host)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("auth: %w", err)
+		}
+	}
+
+	if err := client.Mail(cfg.From); err != nil {
+		return fmt.Errorf("mail from: %w", err)
+	}
+	if err := client.Rcpt(cfg.To); err != nil {
+		return fmt.Errorf("rcpt to: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("data: %w", err)
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close data: %w", err)
+	}
+
+	return client.Quit()
 }
