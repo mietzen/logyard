@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   Go-Binaries:
     runs-on: ubuntu-24.04
