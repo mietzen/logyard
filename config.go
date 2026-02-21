@@ -63,6 +63,7 @@ type AlertRule struct {
 	Count         int    `yaml:"count" json:"count"`
 	WindowMinutes int    `yaml:"window_minutes" json:"window_minutes"`
 	Level         string `yaml:"level" json:"level"`
+	Above         bool   `yaml:"above" json:"above"`
 }
 
 type IgnoreRule struct {

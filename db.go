@@ -158,12 +158,22 @@ func QueryLogs(db *sql.DB, filter LogFilter, limit int) ([]LogEntry, error) {
 	return entries, rows.Err()
 }
 
-func CountMatchingLogs(db *sql.DB, severity string, ignoreRules []IgnoreRule, since time.Time) (int, error) {
+func CountMatchingLogs(db *sql.DB, severity string, above bool, ignoreRules []IgnoreRule, since time.Time) (int, error) {
 	var conditions []string
 	var args []interface{}
 
-	conditions = append(conditions, "severity = ?")
-	args = append(args, severity)
+	if above {
+		sevs := severitiesAtOrAbove(severity)
+		placeholders := make([]string, len(sevs))
+		for i, s := range sevs {
+			placeholders[i] = "?"
+			args = append(args, s)
+		}
+		conditions = append(conditions, "severity IN ("+strings.Join(placeholders, ",")+")")
+	} else {
+		conditions = append(conditions, "severity = ?")
+		args = append(args, severity)
+	}
 	conditions = append(conditions, "timestamp > ?")
 	args = append(args, since)
 
