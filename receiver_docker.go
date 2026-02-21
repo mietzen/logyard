@@ -86,27 +86,30 @@ func StartDockerReceiver(cfg DockerConfig, db *sql.DB) error {
 
 	var tracked sync.Map
 
-	startFollowing := func(id, name string) {
+	startFollowing := func(id, name, since string) {
 		if _, loaded := tracked.LoadOrStore(id, true); loaded {
 			return
 		}
 		go func() {
 			defer tracked.Delete(id)
-			followDockerLogs(client, baseURL, id, name, host, db)
+			followDockerLogs(client, baseURL, id, name, host, since, db)
 		}()
 	}
 
+	startupSince := fmt.Sprintf("%d", time.Now().Add(-1*time.Second).Unix())
 	containers, err := listContainers(client, baseURL)
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
 	}
 	for _, c := range containers {
 		name := containerName(c)
-		startFollowing(c.ID, name)
+		startFollowing(c.ID, name, startupSince)
 		debugf("Docker: following container %s (%s)", name, c.ID[:12])
 	}
 
-	go watchDockerEvents(client, baseURL, startFollowing)
+	go watchDockerEvents(client, baseURL, func(id, name string) {
+		startFollowing(id, name, "0") // new containers: get all logs from start
+	})
 
 	log.Printf("Docker receiver started on %s (%d containers)", cfg.Socket, len(containers))
 	return nil
@@ -186,8 +189,7 @@ func streamDockerEvents(client *http.Client, baseURL string, onStart func(id, na
 	}
 }
 
-func followDockerLogs(client *http.Client, baseURL, containerID, name, host string, db *sql.DB) {
-	since := fmt.Sprintf("%d", time.Now().Unix())
+func followDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) {
 	backoff := time.Second
 
 	for {
@@ -198,13 +200,17 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 			return
 		}
 
-		// Check if container still exists
-		if isContainerGone(client, baseURL, containerID) {
-			debugf("Docker: container %s no longer exists", name)
-			return
+		// Context deadline exceeded is expected — we proactively reconnect
+		// to avoid proxy idle timeouts. Don't check isContainerGone for these.
+		if err != nil && !isContextDeadline(err) {
+			// Check if container still exists
+			if isContainerGone(client, baseURL, containerID) {
+				debugf("Docker: container %s no longer exists", name)
+				return
+			}
 		}
 
-		debugf("Docker: log stream for %s interrupted: %v (reconnecting in %v)", name, err, backoff)
+		debugf("Docker: log stream for %s interrupted: %v (reconnecting)", name, err)
 		time.Sleep(backoff)
 		if backoff < 30*time.Second {
 			backoff *= 2
@@ -222,11 +228,26 @@ func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 	logURL := fmt.Sprintf("%s/containers/%s/logs?follow=true&stdout=true&stderr=true&timestamps=true&since=%s",
 		baseURL, containerID, since)
 
-	resp, err := client.Get(logURL)
+	debugf("Docker: connecting to log stream for %s (since=%s)", name, since)
+
+	// Use a context timeout to proactively reconnect before a proxy kills idle connections.
+	// Docker streams block until new log data arrives; without this, idle connections
+	// get killed by HAProxy-based socket proxies (~60s timeout).
+	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", logURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	debugf("Docker: log stream for %s returned status %d", name, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return "", nil // container gone
@@ -280,6 +301,10 @@ func isContainerGone(client *http.Client, baseURL, containerID string) bool {
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode == http.StatusNotFound
+}
+
+func isContextDeadline(err error) bool {
+	return err != nil && (err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded"))
 }
 
 func parseDockerTimestamp(line string) (time.Time, string) {
