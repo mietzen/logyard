@@ -131,15 +131,3 @@ jobs:
         cat push-shared-tags.sh
         chmod +x ./push-shared-tags.sh
         ./push-shared-tags.sh
-
-  Check-Docker:
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    needs:
-      - Docker-Build
-      - Shared-Manifest
-    steps:
-      - run: |
-          if [[ "${{ needs.Docker-Build.result }}" != "success" || "${{ needs.Shared-Manifest.result }}" != "success" ]]; then
-            exit 1
-          fi

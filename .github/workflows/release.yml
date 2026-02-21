@@ -43,14 +43,3 @@ jobs:
       run: gh release upload ${{ env.VERSION }} logyard-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz --clobber
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  Check-Release:
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    needs:
-      - Go-Binaries
-    steps:
-      - run: |
-          if [[ "${{ needs.Go-Binaries.result }}" != "success" ]]; then
-            exit 1
-          fi
