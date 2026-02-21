@@ -20,7 +20,7 @@
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
     .status-dot.live { background: #4caf50; }
     .status-dot.paused { background: #ff9800; animation: pulse 2s infinite; }
-    .status-dot.loading { background: #4caf50; }
+    .status-dot.loading { background: #4caf50; opacity: 0.5; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
     .filters select, .filters input { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
@@ -93,7 +93,7 @@
   </header>
   <form class="filters" id="log-form" novalidate
         hx-get="/api/logs"
-        hx-trigger="submit, every 3s"
+        hx-trigger="load, submit, every 3s"
         hx-target="#log-body"
         hx-swap="innerHTML">
     <input name="since" id="filter-since" type="hidden">
@@ -202,8 +202,7 @@
         pauseIcon.style.display = '';
         document.getElementById('play-pause-btn').title = 'Pause live updates';
         dot.className = 'status-dot live';
-        form.setAttribute('hx-trigger', 'submit, every 3s');
-        htmx.trigger(form, 'submit');
+        form.setAttribute('hx-trigger', 'load, submit, every 3s');
       }
       htmx.process(form);
     }
@@ -235,7 +234,8 @@
           populateSelect('filter-host', data.hosts, 'All hosts');
           populateSelect('filter-facility', data.facilities, 'All facilities');
           populateSelect('filter-tag', data.tags, 'All tags');
-        });
+        })
+        .catch(() => {});
     }
 
     function populateSelect(id, values, placeholder) {
@@ -260,12 +260,6 @@
     // Refresh filter options every 30s
     loadFilters();
     setInterval(loadFilters, 30000);
-
-    // Initialize default time filter (Last 5 min)
-    (function() {
-      const d = new Date(Date.now() - 5 * 60000);
-      document.getElementById('filter-since').value = d.toISOString().slice(0, 19);
-    })();
 
     // Time filter
     function handleTimePreset(val) {
@@ -305,9 +299,6 @@
       }
     });
 
-    // Trigger initial load
-    htmx.trigger(document.getElementById('log-form'), 'submit');
-
     // Settings modal
     let currentConfig = null;
 
@@ -333,9 +324,12 @@
       document.getElementById('settings-modal').classList.remove('open');
     }
 
-    // Close modal on overlay click
+    // Close modal on overlay click or Escape key
     document.getElementById('settings-modal').addEventListener('click', function(e) {
       if (e.target === this) closeSettings();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeSettings();
     });
 
     function renderAlertRules(rules) {
