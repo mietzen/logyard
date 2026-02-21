@@ -93,9 +93,16 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 	})
 
 	mux.HandleFunc("/api/filters", func(w http.ResponseWriter, r *http.Request) {
-		hosts, _ := DistinctValues(db, "host")
-		facilities, _ := DistinctValues(db, "facility")
-		tags, _ := DistinctValues(db, "tag")
+		q := r.URL.Query()
+		filters := map[string]string{
+			"host":     q.Get("host"),
+			"facility": q.Get("facility"),
+			"tag":      q.Get("tag"),
+		}
+
+		hosts, _ := DistinctValues(db, "host", filters)
+		facilities, _ := DistinctValues(db, "facility", filters)
+		tags, _ := DistinctValues(db, "tag", filters)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string][]string{

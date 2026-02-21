@@ -223,9 +223,18 @@ func SetLastAlerted(db *sql.DB, ruleName string, t time.Time) error {
 	return err
 }
 
-func DistinctValues(db *sql.DB, column string) ([]string, error) {
-	query := fmt.Sprintf("SELECT DISTINCT %s FROM logs WHERE %s != '' ORDER BY %s", column, column, column)
-	rows, err := db.Query(query)
+func DistinctValues(db *sql.DB, column string, filters map[string]string) ([]string, error) {
+	conditions := []string{fmt.Sprintf("%s != ''", column)}
+	var args []interface{}
+	for col, val := range filters {
+		if val != "" && col != column {
+			conditions = append(conditions, fmt.Sprintf("%s = ?", col))
+			args = append(args, val)
+		}
+	}
+	query := fmt.Sprintf("SELECT DISTINCT %s FROM logs WHERE %s ORDER BY %s",
+		column, strings.Join(conditions, " AND "), column)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
