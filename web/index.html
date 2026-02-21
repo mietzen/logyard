@@ -20,21 +20,22 @@
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
     .status-dot.live { background: #4caf50; }
     .status-dot.paused { background: #ff9800; animation: pulse 2s infinite; }
-    .status-dot.loading { background: #4caf50; opacity: 0.5; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-    .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
-    .filters select, .filters input { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
+    .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; align-items: center; }
+    .filters select, .filters input[type="datetime-local"], .filters input[name="search"] { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
     .filters select:focus, .filters input:focus { outline: none; border-color: #e94560; }
-    .filters button { background: #e94560; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
-    .filters button:hover { background: #c73652; }
+    .filters .btn-filter { background: #e94560; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    .filters .btn-filter:hover { background: #c73652; }
+    .filters .btn-reset { background: #333; color: #e0e0e0; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    .filters .btn-reset:hover { background: #444; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    thead { position: sticky; top: 0; background: #16213e; }
-    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; border-right: 1px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; overflow: hidden; }
+    thead { position: sticky; top: 0; background: #16213e; z-index: 1; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; border-right: 1px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; }
     th:last-child { border-right: none; }
-    .col-resize { position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; }
+    .col-resize { position: absolute; top: 0; right: -2px; width: 5px; height: 100%; cursor: col-resize; background: transparent; z-index: 2; }
     .col-resize:hover, .col-resize.active { background: #e94560; }
-    td { padding: 4px 10px; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    td:last-child { white-space: normal; }
+    td { padding: 4px 10px; border-bottom: 1px solid #0f3460; border-right: 1px solid rgba(15,52,96,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    td:last-child { white-space: normal; border-right: none; }
     tr:hover { background: #16213e; }
     .sev-emerg, .sev-alert { background: #4a0000; color: #ff4444; }
     .sev-crit { background: #3a0000; color: #ff6666; }
@@ -73,9 +74,9 @@
     .field-row { display: flex; gap: 8px; }
     .field-row > div { flex: 1; }
     /* Checkbox styled to match section header color */
-    .modal input[type="checkbox"] { width: 14px; height: 14px; margin: 0; -webkit-appearance: none; -moz-appearance: none; appearance: none; border: 1px solid #0f3460; border-radius: 3px; background: #66ccff; cursor: pointer; position: relative; flex-shrink: 0; }
+    .modal input[type="checkbox"] { width: 14px !important; height: 14px !important; min-width: 14px; margin: 0; padding: 0; -webkit-appearance: none; -moz-appearance: none; appearance: none; border: 1px solid #0f3460; border-radius: 2px; background: #66ccff; cursor: pointer; position: relative; display: inline-block; vertical-align: middle; flex-shrink: 0; }
     .modal input[type="checkbox"]:checked { background: #66ccff; }
-    .modal input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 5px; height: 9px; border: solid #16213e; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .modal input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #16213e; border-width: 0 2px 2px 0; transform: rotate(45deg); }
   </style>
 </head>
 <body>
@@ -98,21 +99,11 @@
         hx-swap="innerHTML">
     <input name="since" id="filter-since" type="hidden">
     <input name="until" id="filter-until" type="hidden">
-    <select name="host" id="filter-host" onchange="loadFilters()"><option value="">All hosts</option></select>
-    <select name="facility" id="filter-facility" onchange="loadFilters()"><option value="">All facilities</option></select>
-    <select name="severity" id="filter-severity">
-      <option value="">All severities</option>
-      <option value="emerg">emerg</option>
-      <option value="alert">alert</option>
-      <option value="crit">crit</option>
-      <option value="err">err</option>
-      <option value="warning">warning</option>
-      <option value="notice">notice</option>
-      <option value="info">info</option>
-      <option value="debug">debug</option>
-    </select>
-    <select name="tag" id="filter-tag" onchange="loadFilters()"><option value="">All tags</option></select>
-    <select id="time-preset" onchange="handleTimePreset(this.value)">
+    <select name="host" id="filter-host"><option value="">All hosts</option></select>
+    <select name="facility" id="filter-facility"><option value="">All facilities</option></select>
+    <select name="severity" id="filter-severity"><option value="">All severities</option></select>
+    <select name="tag" id="filter-tag"><option value="">All tags</option></select>
+    <select id="time-preset">
       <option value="">All time</option>
       <option value="5" selected>Last 5 min</option>
       <option value="15">Last 15 min</option>
@@ -122,10 +113,11 @@
       <option value="10080">Last 7 days</option>
       <option value="custom">Custom range</option>
     </select>
-    <input id="filter-since-visible" type="datetime-local" style="display:none" onchange="document.getElementById('filter-since').value=this.value">
-    <input id="filter-until-visible" type="datetime-local" style="display:none" onchange="document.getElementById('filter-until').value=this.value">
+    <input id="filter-since-visible" type="datetime-local" style="display:none">
+    <input id="filter-until-visible" type="datetime-local" style="display:none">
     <input name="search" placeholder="Search message..." autocomplete="off" style="flex:1;min-width:200px">
-    <button type="submit">Filter</button>
+    <button type="submit" class="btn-filter">Filter</button>
+    <button type="button" class="btn-reset" onclick="resetFilters()">Reset</button>
   </form>
   <table>
     <thead>
@@ -182,6 +174,13 @@
   </div>
 
   <script>
+    // Format a Date as local time string matching go-sqlite3 format: "YYYY-MM-DD HH:MM:SS"
+    function localTimeStr(d) {
+      var p = function(n) { return String(n).padStart(2, '0'); };
+      return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' +
+             p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
     // Play/Pause live updates
     let paused = false;
 
@@ -207,66 +206,75 @@
       htmx.process(form);
     }
 
-    // Show loading state on requests
-    document.body.addEventListener('htmx:beforeRequest', function(e) {
-      if (!paused) {
-        document.getElementById('status-dot').className = 'status-dot loading';
-      }
-    });
-    document.body.addEventListener('htmx:afterRequest', function(e) {
-      if (!paused) {
-        document.getElementById('status-dot').className = 'status-dot live';
-      }
-    });
-
     // Populate filter dropdowns from DB, filtered by current selections
     function loadFilters() {
-      const params = new URLSearchParams();
-      const host = document.getElementById('filter-host').value;
-      const facility = document.getElementById('filter-facility').value;
-      const tag = document.getElementById('filter-tag').value;
+      var params = new URLSearchParams();
+      var host = document.getElementById('filter-host').value;
+      var facility = document.getElementById('filter-facility').value;
+      var severity = document.getElementById('filter-severity').value;
+      var tag = document.getElementById('filter-tag').value;
       if (host) params.set('host', host);
       if (facility) params.set('facility', facility);
+      if (severity) params.set('severity', severity);
       if (tag) params.set('tag', tag);
       fetch('/api/filters?' + params.toString())
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
           populateSelect('filter-host', data.hosts, 'All hosts');
           populateSelect('filter-facility', data.facilities, 'All facilities');
+          populateSelect('filter-severity', data.severities, 'All severities');
           populateSelect('filter-tag', data.tags, 'All tags');
         })
-        .catch(() => {});
+        .catch(function() {});
     }
 
     function populateSelect(id, values, placeholder) {
-      const sel = document.getElementById(id);
-      const current = sel.value;
+      var sel = document.getElementById(id);
+      var current = sel.value;
       sel.innerHTML = '<option value="">' + placeholder + '</option>';
       if (values) {
-        values.forEach(v => {
-          const opt = document.createElement('option');
+        values.forEach(function(v) {
+          var opt = document.createElement('option');
           opt.value = v;
           opt.textContent = v;
           if (v === current) opt.selected = true;
           sel.appendChild(opt);
         });
       }
-      // If current value no longer exists in options, reset to all
       if (current && !sel.value) {
         sel.value = '';
       }
     }
 
-    // Refresh filter options every 30s
+    // Refresh filter options every 30s and on dropdown change
     loadFilters();
     setInterval(loadFilters, 30000);
 
+    // Dropdown changes trigger filter refresh and log reload
+    ['filter-host', 'filter-facility', 'filter-severity', 'filter-tag', 'time-preset'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if (id === 'time-preset') {
+          handleTimePreset(this.value);
+        }
+        loadFilters();
+        htmx.trigger(document.getElementById('log-form'), 'submit');
+      });
+    });
+
+    // Visible datetime-local inputs sync to hidden inputs
+    document.getElementById('filter-since-visible').addEventListener('change', function() {
+      document.getElementById('filter-since').value = this.value ? this.value.replace('T', ' ') : '';
+    });
+    document.getElementById('filter-until-visible').addEventListener('change', function() {
+      document.getElementById('filter-until').value = this.value ? this.value.replace('T', ' ') : '';
+    });
+
     // Time filter
     function handleTimePreset(val) {
-      const sinceH = document.getElementById('filter-since');
-      const untilH = document.getElementById('filter-until');
-      const sinceV = document.getElementById('filter-since-visible');
-      const untilV = document.getElementById('filter-until-visible');
+      var sinceH = document.getElementById('filter-since');
+      var untilH = document.getElementById('filter-until');
+      var sinceV = document.getElementById('filter-since-visible');
+      var untilV = document.getElementById('filter-until-visible');
       if (val === 'custom') {
         sinceV.style.display = '';
         untilV.style.display = '';
@@ -279,33 +287,52 @@
         untilV.style.display = 'none';
         sinceV.value = '';
         untilV.value = '';
+        untilH.value = '';
         if (val) {
-          const d = new Date(Date.now() - parseInt(val) * 60000);
-          sinceH.value = d.toISOString().slice(0, 19);
+          sinceH.value = localTimeStr(new Date(Date.now() - parseInt(val) * 60000));
         } else {
           sinceH.value = '';
         }
-        untilH.value = '';
       }
     }
 
     // Update relative time before each HTMX request
     document.body.addEventListener('htmx:configRequest', function(e) {
-      const preset = document.getElementById('time-preset').value;
+      var preset = document.getElementById('time-preset').value;
       if (preset && preset !== 'custom') {
-        const d = new Date(Date.now() - parseInt(preset) * 60000);
-        e.detail.parameters.since = d.toISOString().slice(0, 19);
+        e.detail.parameters.since = localTimeStr(new Date(Date.now() - parseInt(preset) * 60000));
         delete e.detail.parameters.until;
+      } else if (preset === 'custom') {
+        // Normalize T separator to space for custom inputs
+        if (e.detail.parameters.since) {
+          e.detail.parameters.since = e.detail.parameters.since.replace('T', ' ');
+        }
+        if (e.detail.parameters.until) {
+          e.detail.parameters.until = e.detail.parameters.until.replace('T', ' ');
+        }
       }
     });
+
+    // Reset all filters to defaults
+    function resetFilters() {
+      document.getElementById('filter-host').value = '';
+      document.getElementById('filter-facility').value = '';
+      document.getElementById('filter-severity').value = '';
+      document.getElementById('filter-tag').value = '';
+      document.getElementById('time-preset').value = '5';
+      document.querySelector('input[name="search"]').value = '';
+      handleTimePreset('5');
+      loadFilters();
+      htmx.trigger(document.getElementById('log-form'), 'submit');
+    }
 
     // Settings modal
     let currentConfig = null;
 
     function openSettings() {
       fetch('/api/config')
-        .then(r => r.json())
-        .then(cfg => {
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
           currentConfig = cfg;
           document.getElementById('cfg-smtp-host').value = cfg.smtp.host || '';
           document.getElementById('cfg-smtp-port').value = cfg.smtp.port || 587;
@@ -333,9 +360,9 @@
     });
 
     function renderAlertRules(rules) {
-      const c = document.getElementById('alert-rules-container');
+      var c = document.getElementById('alert-rules-container');
       c.innerHTML = '';
-      rules.forEach((r, i) => addAlertRuleDOM(r, i));
+      rules.forEach(function(r, i) { addAlertRuleDOM(r, i); });
     }
 
     function addAlertRule() {
@@ -343,8 +370,8 @@
     }
 
     function addAlertRuleDOM(r) {
-      const c = document.getElementById('alert-rules-container');
-      const div = document.createElement('div');
+      var c = document.getElementById('alert-rules-container');
+      var div = document.createElement('div');
       div.className = 'rule-group';
       div.innerHTML = '<button class="remove-btn" onclick="this.parentElement.remove()">&times;</button>' +
         '<div class="field-row">' +
@@ -360,9 +387,9 @@
     }
 
     function renderIgnoreRules(rules) {
-      const c = document.getElementById('ignore-rules-container');
+      var c = document.getElementById('ignore-rules-container');
       c.innerHTML = '';
-      rules.forEach((r, i) => addIgnoreRuleDOM(r, i));
+      rules.forEach(function(r, i) { addIgnoreRuleDOM(r, i); });
     }
 
     function addIgnoreRule() {
@@ -370,8 +397,8 @@
     }
 
     function addIgnoreRuleDOM(r) {
-      const c = document.getElementById('ignore-rules-container');
-      const div = document.createElement('div');
+      var c = document.getElementById('ignore-rules-container');
+      var div = document.createElement('div');
       div.className = 'rule-group';
       div.innerHTML = '<button class="remove-btn" onclick="this.parentElement.remove()">&times;</button>' +
         '<div class="field-row">' +
@@ -383,8 +410,8 @@
     }
 
     function severityOptions(selected) {
-      const levels = ['emerg','alert','crit','err','warning','notice','info','debug'];
-      return levels.map(l => '<option value="'+l+'"'+(l===selected?' selected':'')+'>'+l+'</option>').join('');
+      var levels = ['emerg','alert','crit','err','warning','notice','info','debug'];
+      return levels.map(function(l) { return '<option value="'+l+'"'+(l===selected?' selected':'')+'>'+l+'</option>'; }).join('');
     }
 
     function esc(s) {
@@ -393,8 +420,8 @@
     }
 
     function saveSettings() {
-      const alerts = [];
-      document.querySelectorAll('#alert-rules-container .rule-group').forEach(g => {
+      var alerts = [];
+      document.querySelectorAll('#alert-rules-container .rule-group').forEach(function(g) {
         alerts.push({
           name: g.querySelector('.ar-name').value,
           count: parseInt(g.querySelector('.ar-count').value) || 1,
@@ -404,9 +431,9 @@
         });
       });
 
-      const ignore = [];
-      document.querySelectorAll('#ignore-rules-container .rule-group').forEach(g => {
-        const rule = {
+      var ignore = [];
+      document.querySelectorAll('#ignore-rules-container .rule-group').forEach(function(g) {
+        var rule = {
           host: g.querySelector('.ir-host').value,
           facility: g.querySelector('.ir-facility').value,
           level: g.querySelector('.ir-level').value
@@ -414,7 +441,7 @@
         if (rule.host || rule.facility || rule.level) ignore.push(rule);
       });
 
-      const cfg = {
+      var cfg = {
         smtp: {
           host: document.getElementById('cfg-smtp-host').value,
           port: parseInt(document.getElementById('cfg-smtp-port').value) || 587,
@@ -433,20 +460,20 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(cfg)
       })
-      .then(r => {
-        if (!r.ok) return r.text().then(t => { throw new Error(t); });
+      .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
         closeSettings();
       })
-      .catch(err => alert('Save failed: ' + err.message));
+      .catch(function(err) { alert('Save failed: ' + err.message); });
     }
 
     // Column resize
-    document.querySelectorAll('.col-resize').forEach(handle => {
+    document.querySelectorAll('.col-resize').forEach(function(handle) {
       handle.addEventListener('mousedown', function(e) {
         e.preventDefault();
-        const th = this.parentElement;
-        const startX = e.pageX;
-        const startW = th.offsetWidth;
+        var th = this.parentElement;
+        var startX = e.pageX;
+        var startW = th.offsetWidth;
         this.classList.add('active');
         function onMove(e) {
           th.style.width = Math.max(40, startW + e.pageX - startX) + 'px';
