@@ -191,7 +191,7 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 	backoff := time.Second
 
 	for {
-		err := streamDockerLogs(client, baseURL, containerID, name, host, since, db)
+		lastTS, err := streamDockerLogs(client, baseURL, containerID, name, host, since, db)
 		if err == nil {
 			// Clean EOF — container stopped normally
 			debugf("Docker: container %s stopped", name)
@@ -210,38 +210,42 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 			backoff *= 2
 		}
 
-		// Update since to avoid replaying logs
-		since = fmt.Sprintf("%d", time.Now().Unix())
+		// Use last received timestamp to avoid gaps, only advance if we got data
+		if lastTS != "" {
+			since = lastTS
+			backoff = time.Second // reset backoff on successful data
+		}
 	}
 }
 
-func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) error {
+func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) (string, error) {
 	logURL := fmt.Sprintf("%s/containers/%s/logs?follow=true&stdout=true&stderr=true&timestamps=true&since=%s",
 		baseURL, containerID, since)
 
 	resp, err := client.Get(logURL)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil // container gone
+		return "", nil // container gone
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("status %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, body)
 	}
 
 	reader := bufio.NewReader(resp.Body)
 	header := make([]byte, 8)
+	var lastTimestamp string
 
 	for {
 		if _, err := io.ReadFull(reader, header); err != nil {
 			if err == io.EOF {
-				return nil // clean end — container stopped
+				return lastTimestamp, nil // clean end — container stopped
 			}
-			return err // connection dropped — will retry
+			return lastTimestamp, err // connection dropped — will retry
 		}
 
 		streamType := header[0]
@@ -249,7 +253,7 @@ func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 
 		payload := make([]byte, frameSize)
 		if _, err := io.ReadFull(reader, payload); err != nil {
-			return err
+			return lastTimestamp, err
 		}
 
 		severity := "info"
@@ -260,6 +264,7 @@ func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 		line := strings.TrimRight(string(payload), "\n")
 
 		ts, message := parseDockerTimestamp(line)
+		lastTimestamp = fmt.Sprintf("%d", ts.Unix())
 
 		if err := InsertLog(db, ts, host, "docker", severity, name, message); err != nil {
 			log.Printf("Docker: insert error for %s: %v", name, err)
