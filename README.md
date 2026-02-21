@@ -2,6 +2,14 @@
 
 A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies. Accepts both RFC 3164 (BSD) and RFC 5424 syslog messages over UDP and TCP.
 
+![Gif of Logyards log console](assets/censored-console.gif)
+
+---
+
+![Gif of Logyards settings](assets/settings.gif)
+
+---
+
 ## Build
 
 Requires Go 1.25+ and CGO (for SQLite).
