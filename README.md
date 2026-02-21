@@ -83,10 +83,22 @@ docker:
 Logyard can ingest container logs directly from Docker via the Docker socket or a [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy). This provides proper severity mapping that Docker's built-in syslog driver lacks:
 
 - **stdout** is logged as severity `info`
-- **stderr** is logged as severity `err`
+- **stderr** is logged as severity `err` (configurable per container via label)
 - **Facility** is set to `docker`
 - **Tag** is the container name
 - **Host** is `localhost` for unix sockets, or the hostname from the TCP address
+
+Some applications (e.g. Python/Django) write all output to stderr. To override the stderr severity for a container, add a `logyard.stderr` label:
+
+```yaml
+services:
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx
+    labels:
+      logyard.stderr: "info"
+```
+
+Valid values are any syslog severity: `emerg`, `alert`, `crit`, `err`, `warning`, `notice`, `info`, `debug`.
 
 ```yaml
 docker:

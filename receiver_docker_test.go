@@ -145,7 +145,7 @@ func TestFollowDockerLogs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	followDockerLogs(server.Client(), server.URL, "test-id", "test-container", "docker-host", "0", db)
+	followDockerLogs(server.Client(), server.URL, "test-id", "test-container", "docker-host", "0", "err", db)
 
 	// Verify logs were inserted
 	entries, err := QueryLogs(db, LogFilter{}, 100)
@@ -225,7 +225,7 @@ func TestFollowDockerLogs_RetryOnDrop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	followDockerLogs(server.Client(), server.URL, "retry-id", "retry-container", "test-host", "0", db)
+	followDockerLogs(server.Client(), server.URL, "retry-id", "retry-container", "test-host", "0", "err", db)
 
 	entries, err := QueryLogs(db, LogFilter{}, 100)
 	if err != nil {
@@ -258,6 +258,56 @@ func TestIsContainerGone(t *testing.T) {
 	}
 	if !isContainerGone(server.Client(), server.URL, "deleted") {
 		t.Error("expected container 'deleted' to be gone")
+	}
+}
+
+func TestContainerStderrSeverity(t *testing.T) {
+	tests := []struct {
+		labels map[string]string
+		want   string
+	}{
+		{nil, "err"},
+		{map[string]string{}, "err"},
+		{map[string]string{"logyard.stderr": "info"}, "info"},
+		{map[string]string{"logyard.stderr": "warning"}, "warning"},
+		{map[string]string{"other-label": "value"}, "err"},
+	}
+	for _, tt := range tests {
+		got := containerStderrSeverity(tt.labels)
+		if got != tt.want {
+			t.Errorf("containerStderrSeverity(%v) = %q, want %q", tt.labels, got, tt.want)
+		}
+	}
+}
+
+func TestFollowDockerLogs_StderrLabel(t *testing.T) {
+	db, cleanup := testDB(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	tsStr := now.Format(time.RFC3339Nano)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/containers/label-id/logs" {
+			http.NotFound(w, r)
+			return
+		}
+		writeDockerFrame(w, 2, fmt.Sprintf("%s stderr-as-info\n", tsStr))
+	}))
+	defer server.Close()
+
+	// Use "info" as stderr severity (simulating logyard.stderr=info label)
+	followDockerLogs(server.Client(), server.URL, "label-id", "label-test", "host", "0", "info", db)
+
+	entries, err := QueryLogs(db, LogFilter{}, 100)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(entries))
+	}
+	if entries[0].Severity != "info" {
+		t.Errorf("severity = %q, want %q (stderr with logyard.stderr=info label)", entries[0].Severity, "info")
 	}
 }
 

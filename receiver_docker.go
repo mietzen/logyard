@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,8 +19,9 @@ import (
 )
 
 type dockerContainer struct {
-	ID    string   `json:"Id"`
-	Names []string `json:"Names"`
+	ID     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	Labels map[string]string `json:"Labels"`
 }
 
 type dockerEvent struct {
@@ -86,13 +88,13 @@ func StartDockerReceiver(cfg DockerConfig, db *sql.DB) error {
 
 	var tracked sync.Map
 
-	startFollowing := func(id, name, since string) {
+	startFollowing := func(id, name, since, stderrSeverity string) {
 		if _, loaded := tracked.LoadOrStore(id, true); loaded {
 			return
 		}
 		go func() {
 			defer tracked.Delete(id)
-			followDockerLogs(client, baseURL, id, name, host, since, db)
+			followDockerLogs(client, baseURL, id, name, host, since, stderrSeverity, db)
 		}()
 	}
 
@@ -103,12 +105,14 @@ func StartDockerReceiver(cfg DockerConfig, db *sql.DB) error {
 	}
 	for _, c := range containers {
 		name := containerName(c)
-		startFollowing(c.ID, name, startupSince)
-		debugf("Docker: following container %s (%s)", name, c.ID[:12])
+		stderr := containerStderrSeverity(c.Labels)
+		startFollowing(c.ID, name, startupSince, stderr)
+		debugf("Docker: following container %s (%s) stderr=%s", name, c.ID[:12], stderr)
 	}
 
-	go watchDockerEvents(client, baseURL, func(id, name string) {
-		startFollowing(id, name, "0") // new containers: get all logs from start
+	go watchDockerEvents(client, baseURL, func(id, name string, attrs map[string]string) {
+		stderr := containerStderrSeverity(attrs)
+		startFollowing(id, name, "0", stderr) // new containers: get all logs from start
 	})
 
 	log.Printf("Docker receiver started on %s (%d containers)", cfg.Socket, len(containers))
@@ -134,7 +138,14 @@ func listContainers(client *http.Client, baseURL string) ([]dockerContainer, err
 	return containers, nil
 }
 
-func watchDockerEvents(client *http.Client, baseURL string, onStart func(id, name string)) {
+func containerStderrSeverity(labels map[string]string) string {
+	if v, ok := labels["logyard.stderr"]; ok && v != "" {
+		return v
+	}
+	return "err"
+}
+
+func watchDockerEvents(client *http.Client, baseURL string, onStart func(id, name string, attrs map[string]string)) {
 	backoff := time.Second
 	for {
 		err := streamDockerEvents(client, baseURL, onStart)
@@ -144,6 +155,8 @@ func watchDockerEvents(client *http.Client, baseURL string, onStart func(id, nam
 		time.Sleep(backoff)
 		if backoff < 30*time.Second {
 			backoff *= 2
+		} else {
+			backoff = time.Second // reset after max to avoid permanent slow polling
 		}
 
 		// Re-list containers on reconnect to catch any we missed
@@ -153,12 +166,12 @@ func watchDockerEvents(client *http.Client, baseURL string, onStart func(id, nam
 			continue
 		}
 		for _, c := range containers {
-			onStart(c.ID, containerName(c))
+			onStart(c.ID, containerName(c), c.Labels)
 		}
 	}
 }
 
-func streamDockerEvents(client *http.Client, baseURL string, onStart func(id, name string)) error {
+func streamDockerEvents(client *http.Client, baseURL string, onStart func(id, name string, attrs map[string]string)) error {
 	resp, err := client.Get(baseURL + "/events?filters=" + url.QueryEscape(`{"type":["container"],"event":["start"]}`))
 	if err != nil {
 		return err
@@ -185,15 +198,15 @@ func streamDockerEvents(client *http.Client, baseURL string, onStart func(id, na
 			name = id
 		}
 		debugf("Docker: container started %s (%s)", name, event.Actor.ID[:12])
-		onStart(event.Actor.ID, name)
+		onStart(event.Actor.ID, name, event.Actor.Attributes)
 	}
 }
 
-func followDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) {
+func followDockerLogs(client *http.Client, baseURL, containerID, name, host, since, stderrSeverity string, db *sql.DB) {
 	backoff := time.Second
 
 	for {
-		lastTS, err := streamDockerLogs(client, baseURL, containerID, name, host, since, db)
+		lastTS, err := streamDockerLogs(client, baseURL, containerID, name, host, since, stderrSeverity, db)
 		if err == nil {
 			// Clean EOF — container stopped normally
 			debugf("Docker: container %s stopped", name)
@@ -202,8 +215,7 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 
 		// Context deadline exceeded is expected — we proactively reconnect
 		// to avoid proxy idle timeouts. Don't check isContainerGone for these.
-		if err != nil && !isContextDeadline(err) {
-			// Check if container still exists
+		if !isContextDeadline(err) {
 			if isContainerGone(client, baseURL, containerID) {
 				debugf("Docker: container %s no longer exists", name)
 				return
@@ -224,7 +236,7 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 	}
 }
 
-func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) (string, error) {
+func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, since, stderrSeverity string, db *sql.DB) (string, error) {
 	logURL := fmt.Sprintf("%s/containers/%s/logs?follow=true&stdout=true&stderr=true&timestamps=true&since=%s",
 		baseURL, containerID, since)
 
@@ -279,13 +291,13 @@ func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, sin
 
 		severity := "info"
 		if streamType == 2 {
-			severity = "err"
+			severity = stderrSeverity
 		}
 
 		line := strings.TrimRight(string(payload), "\n")
 
 		ts, message := parseDockerTimestamp(line)
-		lastTimestamp = fmt.Sprintf("%d", ts.Unix())
+		lastTimestamp = fmt.Sprintf("%d.%09d", ts.Unix(), ts.Nanosecond())
 
 		if err := InsertLog(db, ts, host, "docker", severity, name, message); err != nil {
 			log.Printf("Docker: insert error for %s: %v", name, err)
@@ -304,14 +316,14 @@ func isContainerGone(client *http.Client, baseURL, containerID string) bool {
 }
 
 func isContextDeadline(err error) bool {
-	return err != nil && (err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded"))
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 func parseDockerTimestamp(line string) (time.Time, string) {
 	// Docker timestamp format: 2026-02-21T18:06:48.123456789Z <message>
 	if idx := strings.IndexByte(line, ' '); idx > 0 {
 		if ts, err := time.Parse(time.RFC3339Nano, line[:idx]); err == nil {
-			return ts, line[idx+1:]
+			return ts.Local(), line[idx+1:]
 		}
 	}
 	return time.Now(), line
