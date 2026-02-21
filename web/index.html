@@ -14,12 +14,13 @@
     .icon-btn { background: none; border: none; cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
     .icon-btn svg { width: 16px; height: 16px; fill: #e0e0e0; }
     .icon-btn:hover svg { fill: #e94560; }
-    .play-pause { margin-right: 8px; }
+    .play-pause { margin-left: 10px; border: 1px solid #a0a0a0 !important; border-radius: 4px; padding: 3px 6px !important; }
+    .play-pause:hover { border-color: #e94560 !important; }
     .gear-btn { margin-left: 8px; }
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .status-dot.live { background: #4caf50; animation: pulse 2s infinite; }
-    .status-dot.paused { background: #ff9800; }
-    .status-dot.loading { animation: pulse 0.5s infinite; background: #4caf50; }
+    .status-dot.live { background: #4caf50; }
+    .status-dot.paused { background: #ff9800; animation: pulse 2s infinite; }
+    .status-dot.loading { background: #4caf50; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
     .filters select, .filters input { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
@@ -28,7 +29,8 @@
     .filters button:hover { background: #c73652; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { position: sticky; top: 0; background: #16213e; }
-    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; overflow: hidden; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; border-right: 1px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; overflow: hidden; }
+    th:last-child { border-right: none; }
     .col-resize { position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; }
     .col-resize:hover, .col-resize.active { background: #e94560; }
     td { padding: 4px 10px; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -70,19 +72,20 @@
     .add-btn:hover { background: #1a4a7a; }
     .field-row { display: flex; gap: 8px; }
     .field-row > div { flex: 1; }
-    /* Custom checkbox */
-    .modal input[type="checkbox"] { -webkit-appearance: none; -moz-appearance: none; appearance: none; width: 14px !important; height: 14px; min-width: 14px; margin: 0; padding: 0; border: 1px solid #0f3460; border-radius: 2px; background: #66ccff; cursor: pointer; position: relative; display: inline-block; vertical-align: middle; flex-shrink: 0; }
-    .modal input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #16213e; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    /* Checkbox styled to match section header color */
+    .modal input[type="checkbox"] { width: 14px; height: 14px; margin: 0; -webkit-appearance: none; -moz-appearance: none; appearance: none; border: 1px solid #0f3460; border-radius: 3px; background: #66ccff; cursor: pointer; position: relative; flex-shrink: 0; }
+    .modal input[type="checkbox"]:checked { background: #66ccff; }
+    .modal input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 5px; height: 9px; border: solid #16213e; border-width: 0 2px 2px 0; transform: rotate(45deg); }
   </style>
 </head>
 <body>
   <header>
     <h1>
+      <span class="status-dot live" id="status-dot"></span>Logyard
       <button class="icon-btn play-pause" id="play-pause-btn" onclick="togglePause()" title="Pause live updates">
         <svg id="pause-icon" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
         <svg id="play-icon" viewBox="0 0 24 24" style="display:none"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
       </button>
-      <span class="status-dot live" id="status-dot"></span>Logyard
     </h1>
     <button class="icon-btn gear-btn" onclick="openSettings()" title="Settings">
       <svg viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.04 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
