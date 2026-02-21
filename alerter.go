@@ -33,7 +33,7 @@ func evaluateAlerts(cfg Config, db *sql.DB) {
 	for _, rule := range cfg.Alerts {
 		since := time.Now().Add(-time.Duration(rule.WindowMinutes) * time.Minute)
 
-		count, err := CountMatchingLogs(db, rule.Level, cfg.Ignore, since)
+		count, err := CountMatchingLogs(db, rule.Level, rule.Above, cfg.Ignore, since)
 		if err != nil {
 			log.Printf("alert query error for %q: %v", rule.Name, err)
 			continue

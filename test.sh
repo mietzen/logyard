@@ -43,6 +43,11 @@ alerts:
     count: 1
     window_minutes: 5
     level: warning
+  - name: "test-above-alert"
+    count: 1
+    window_minutes: 5
+    level: warning
+    above: true
 YAML
 
 echo "=== Starting logyard ==="
@@ -64,14 +69,20 @@ sleep 1
 echo "=== Sending RFC 5424 message (TCP) ==="
 RFC5424_TS=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 echo "<12>1 ${RFC5424_TS} rfc5424host myapp 1234 - - RFC5424 warning test" | nc -w1 127.0.0.1 1515
+sleep 1
+
+# --- RFC 3164 err message via UDP (for above test) ---
+echo "=== Sending RFC 3164 err message (UDP, for above test) ==="
+SYSLOG_TS2=$(date -u '+%b %d %H:%M:%S')
+echo "<11>${SYSLOG_TS2} abovehost myapp: RFC3164 err test for above" | nc -u -w1 127.0.0.1 1514
 sleep 2
 
 echo "=== Checking database ==="
 docker exec logyard-test sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1; sqlite3 /data/test-logyard.db "SELECT * FROM logs;"'
 COUNT=$(docker exec logyard-test sh -c 'sqlite3 /data/test-logyard.db "SELECT count(*) FROM logs;"')
 echo "Log count: $COUNT"
-if [ "$COUNT" -lt 2 ]; then
-    echo "FAIL: Expected at least 2 logs, got $COUNT"
+if [ "$COUNT" -lt 3 ]; then
+    echo "FAIL: Expected at least 3 logs, got $COUNT"
     exit 1
 fi
 
@@ -91,13 +102,21 @@ if [ "$RFC5424_COUNT" -lt 1 ]; then
 fi
 echo "PASS: RFC 5424 message stored"
 
+# Verify above test entry
+ABOVE_COUNT=$(docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT count(*) FROM logs WHERE host='abovehost';\"")
+if [ "$ABOVE_COUNT" -lt 1 ]; then
+    echo "FAIL: Above test message not found"
+    exit 1
+fi
+echo "PASS: Above test message stored"
+
 echo "=== Waiting for alert evaluation ==="
 sleep 5
 
 echo "=== Logyard logs ==="
 docker logs logyard-test
 
-echo "=== Checking mailpit for alert email ==="
+echo "=== Checking mailpit for alert emails ==="
 MAIL_RESPONSE=$(docker exec mailpit-test wget -qO- http://localhost:8025/api/v1/messages)
 MSG_COUNT=$(echo "$MAIL_RESPONSE" | grep -o '"messages_count":[0-9]*' | cut -d: -f2)
 echo "Email count: $MSG_COUNT"
@@ -106,7 +125,17 @@ if [ "$MSG_COUNT" -lt 1 ]; then
     echo "$MAIL_RESPONSE"
     exit 1
 fi
-echo "PASS: Alert email received"
+echo "PASS: Alert email(s) received"
+
+# Check that the "above" alert fired (err triggers warning-and-above rule)
+# The above rule should fire because err is above warning
+ABOVE_ALERT=$(echo "$MAIL_RESPONSE" | grep -o 'test-above-alert' || true)
+if [ -z "$ABOVE_ALERT" ]; then
+    echo "FAIL: Above alert (test-above-alert) did not fire for err-level message"
+    echo "$MAIL_RESPONSE"
+    exit 1
+fi
+echo "PASS: Above alert triggered by err-level message"
 
 echo "=== Checking web UI ==="
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
@@ -128,6 +157,32 @@ if ! echo "$BODY" | grep -q "rfc5424host"; then
     exit 1
 fi
 echo "PASS: Web UI and API working"
+
+echo "=== Checking healthz ==="
+HEALTH=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/healthz)
+if [ "$HEALTH" != "200" ]; then
+    echo "FAIL: Healthcheck failed"
+    exit 1
+fi
+echo "PASS: Healthcheck OK"
+
+echo "=== Checking filters API ==="
+FILTERS=$(curl -s http://127.0.0.1:8080/api/filters)
+if ! echo "$FILTERS" | grep -q "rfc3164host"; then
+    echo "FAIL: Filters API missing host"
+    echo "$FILTERS"
+    exit 1
+fi
+echo "PASS: Filters API working"
+
+echo "=== Checking config API ==="
+CONFIG=$(curl -s http://127.0.0.1:8080/api/config)
+if ! echo "$CONFIG" | grep -q "test-above-alert"; then
+    echo "FAIL: Config API missing above alert rule"
+    echo "$CONFIG"
+    exit 1
+fi
+echo "PASS: Config API working"
 
 echo ""
 echo "=== All tests passed ==="

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Logyard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M17.8,20C17.4,21.2 16.3,22 15,22H5C3.3,22 2,20.7 2,19V18H5L14.2,18C14.6,19.2 15.7,20 17,20H17.8M19,2C20.7,2 22,3.3 22,5V6H20V5C20,4.4 19.6,4 19,4C18.4,4 18,4.4 18,5V18H17C16.4,18 16,17.6 16,17V16H5V5C5,3.3 6.3,2 8,2H19M8,6V8H15V6H8M8,10V12H14V10H8Z'/%3E%3C/svg%3E">
   <script src="/static/htmx.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -291,7 +292,7 @@
     }
 
     function addAlertRule() {
-      addAlertRuleDOM({name:'', count:1, window_minutes:5, level:'err'});
+      addAlertRuleDOM({name:'', count:1, window_minutes:5, level:'err', above:false});
     }
 
     function addAlertRuleDOM(r) {
@@ -302,6 +303,7 @@
         '<div class="field-row">' +
         '<div><label>Name</label><input class="ar-name" value="' + esc(r.name) + '"></div>' +
         '<div><label>Level</label><select class="ar-level">' + severityOptions(r.level) + '</select></div>' +
+        '<div style="display:flex;align-items:flex-end;padding-bottom:6px"><label style="display:inline;margin:0"><input class="ar-above" type="checkbox"' + (r.above ? ' checked' : '') + '> & above</label></div>' +
         '</div>' +
         '<div class="field-row">' +
         '<div><label>Count</label><input class="ar-count" type="number" value="' + (r.count||1) + '"></div>' +
@@ -350,7 +352,8 @@
           name: g.querySelector('.ar-name').value,
           count: parseInt(g.querySelector('.ar-count').value) || 1,
           window_minutes: parseInt(g.querySelector('.ar-window').value) || 5,
-          level: g.querySelector('.ar-level').value
+          level: g.querySelector('.ar-level').value,
+          above: g.querySelector('.ar-above').checked
         });
       });
 
