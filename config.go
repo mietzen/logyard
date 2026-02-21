@@ -67,9 +67,10 @@ type AlertRule struct {
 }
 
 type IgnoreRule struct {
-	Host     string `yaml:"host" json:"host"`
+	Host    string `yaml:"host" json:"host"`
 	Facility string `yaml:"facility" json:"facility"`
-	Level    string `yaml:"level" json:"level"`
+	Level   string `yaml:"level" json:"level"`
+	Message string `yaml:"message" json:"message"`
 }
 
 type ListenConfig struct {

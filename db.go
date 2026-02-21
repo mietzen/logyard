@@ -193,6 +193,10 @@ func CountMatchingLogs(db *sql.DB, severity string, above bool, ignoreRules []Ig
 			parts = append(parts, "severity = ?")
 			ruleArgs = append(ruleArgs, rule.Level)
 		}
+		if rule.Message != "" {
+			parts = append(parts, "message REGEXP ?")
+			ruleArgs = append(ruleArgs, rule.Message)
+		}
 		if len(parts) > 0 {
 			conditions = append(conditions, "NOT ("+strings.Join(parts, " AND ")+")")
 			args = append(args, ruleArgs...)
