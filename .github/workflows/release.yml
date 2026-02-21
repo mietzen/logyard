@@ -36,21 +36,10 @@ jobs:
           sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
           export CC=aarch64-linux-gnu-gcc
         fi
-        go build -ldflags="-s -w -X main.version=${VERSION#v}" -o logyard-${GOOS}-${GOARCH} .
-        tar czf logyard-${GOOS}-${GOARCH}.tar.gz logyard-${GOOS}-${GOARCH}
+        go build -ldflags="-s -w -X main.version=${VERSION#v}" -o logyard .
+        tar czf logyard-${GOOS}-${GOARCH}.tar.gz logyard
 
     - name: Upload release asset
       run: gh release upload ${{ env.VERSION }} logyard-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz --clobber
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  Check-Release:
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    needs:
-      - Go-Binaries
-    steps:
-      - run: |
-          if [[ "${{ needs.Go-Binaries.result }}" != "success" ]]; then
-            exit 1
-          fi
