@@ -191,6 +191,76 @@ func TestFollowDockerLogs(t *testing.T) {
 	}
 }
 
+func TestFollowDockerLogs_RetryOnDrop(t *testing.T) {
+	db, cleanup := testDB(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	tsStr := now.Format(time.RFC3339Nano)
+	callCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/containers/retry-id/json" {
+			// First call: container exists; second call: container gone
+			callCount++
+			if callCount <= 2 {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, `{"Id":"retry-id","State":{"Running":true}}`)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+			return
+		}
+		if r.URL.Path == "/containers/retry-id/logs" {
+			// Write one complete frame, then an incomplete header to simulate connection drop
+			writeDockerFrame(w, 1, fmt.Sprintf("%s retry-message\n", tsStr))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			// Write partial header (3 bytes of 8) — causes io.ErrUnexpectedEOF
+			w.Write([]byte{1, 0, 0})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	followDockerLogs(server.Client(), server.URL, "retry-id", "retry-container", "test-host", db)
+
+	entries, err := QueryLogs(db, LogFilter{}, 100)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	// Should have received messages from multiple connection attempts
+	if len(entries) < 2 {
+		t.Fatalf("expected at least 2 log entries from retries, got %d", len(entries))
+	}
+	for _, e := range entries {
+		if e.Message != "retry-message" {
+			t.Errorf("unexpected message: %q", e.Message)
+		}
+	}
+}
+
+func TestIsContainerGone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/containers/exists/json" {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"Id":"exists"}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if isContainerGone(server.Client(), server.URL, "exists") {
+		t.Error("expected container 'exists' to not be gone")
+	}
+	if !isContainerGone(server.Client(), server.URL, "deleted") {
+		t.Error("expected container 'deleted' to be gone")
+	}
+}
+
 func writeDockerFrame(w http.ResponseWriter, streamType byte, payload string) {
 	header := make([]byte, 8)
 	header[0] = streamType
