@@ -97,17 +97,20 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 		filters := map[string]string{
 			"host":     q.Get("host"),
 			"facility": q.Get("facility"),
+			"severity": q.Get("severity"),
 			"tag":      q.Get("tag"),
 		}
 
 		hosts, _ := DistinctValues(db, "host", filters)
 		facilities, _ := DistinctValues(db, "facility", filters)
+		severities, _ := DistinctValues(db, "severity", filters)
 		tags, _ := DistinctValues(db, "tag", filters)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string][]string{
 			"hosts":      hosts,
 			"facilities": facilities,
+			"severities": severities,
 			"tags":       tags,
 		})
 	})
