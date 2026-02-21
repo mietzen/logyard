@@ -1,6 +1,6 @@
 # Logyard
 
-A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies. Accepts both RFC 3164 (BSD) and RFC 5424 syslog messages over UDP and TCP.
+A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies. Accepts both RFC 3164 (BSD) and RFC 5424 syslog messages over UDP and TCP. Can also ingest Docker container logs directly via the Docker socket, with proper stdout/stderr to severity mapping.
 
 ![Gif of Logyards log console](assets/censored-console.gif)
 
@@ -72,6 +72,47 @@ ignore:
   - host: proxmox
     level: warning
   - message: "CRON|systemd-.*"
+
+docker:
+  enabled: true
+  socket: "unix:///var/run/docker.sock"  # or "tcp://proxy:2375"
+```
+
+### Docker log ingestion
+
+Logyard can ingest container logs directly from Docker via the Docker socket or a [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy). This provides proper severity mapping that Docker's built-in syslog driver lacks:
+
+- **stdout** is logged as severity `info`
+- **stderr** is logged as severity `err`
+- **Facility** is set to `docker`
+- **Tag** is the container name
+- **Host** is `localhost` for unix sockets, or the hostname from the TCP address
+
+```yaml
+docker:
+  enabled: true
+  socket: "unix:///var/run/docker.sock"
+```
+
+When using a docker-socket-proxy, set `CONTAINERS=1` to allow access to the container list and log endpoints:
+
+```yaml
+# docker-compose.yml
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+```
+
+Then point logyard at the proxy:
+
+```yaml
+docker:
+  enabled: true
+  socket: "tcp://socket-proxy:2375"
 ```
 
 ### Alert rules

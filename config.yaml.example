@@ -35,3 +35,7 @@ ignore:
   - host: proxmox
     level: warning
   - message: "CRON|systemd-.*"
+
+# docker:
+#   enabled: true
+#   socket: "unix:///var/run/docker.sock"  # or "tcp://proxy:2375"

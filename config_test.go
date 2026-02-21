@@ -139,3 +139,45 @@ func TestValidateConfig_NoAlerts(t *testing.T) {
 		t.Fatalf("expected no error for empty alerts, got: %v", err)
 	}
 }
+
+func TestValidateConfig_DockerDisabled(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: false}}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error for disabled docker, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DockerMissingSocket(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: true}}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for missing docker socket")
+	}
+}
+
+func TestValidateConfig_DockerInvalidScheme(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: true, Socket: "http://localhost:2375"}}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid docker socket scheme")
+	}
+}
+
+func TestValidateConfig_DockerUnixSocket(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: true, Socket: "unix:///var/run/docker.sock"}}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error for unix socket, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DockerTCPSocket(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: true, Socket: "tcp://proxy:2375"}}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error for tcp socket, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DockerTCPNoHost(t *testing.T) {
+	cfg := Config{Retention: 14, Docker: DockerConfig{Enabled: true, Socket: "tcp://"}}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for tcp socket without host")
+	}
+}
