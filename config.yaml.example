@@ -2,6 +2,7 @@
 
 # db_path: ./logyard.db
 # retention: 14  # days
+# debug: false
 
 # listen:
 #   udp: ":514"
@@ -30,5 +31,7 @@ alerts:
 ignore:
   - host: noisy-box.lan
   - facility: kern
+  - tag: CRON
   - host: proxmox
     level: warning
+  - message: "CRON|systemd-.*"

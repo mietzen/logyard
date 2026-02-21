@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -36,6 +37,7 @@ func (cm *ConfigManager) Update(cfg Config) error {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	cm.cfg = cfg
+	debugMode = cfg.Debug
 	return nil
 }
 
@@ -44,6 +46,7 @@ type Config struct {
 	Alerts    []AlertRule  `yaml:"alerts"`
 	Ignore    []IgnoreRule `yaml:"ignore"`
 	Retention int          `yaml:"retention"`
+	Debug     bool         `yaml:"debug"`
 	DBPath    string       `yaml:"db_path"`
 	Listen    ListenConfig `yaml:"listen"`
 	WebAddr   string       `yaml:"web_addr"`
@@ -67,10 +70,11 @@ type AlertRule struct {
 }
 
 type IgnoreRule struct {
-	Host    string `yaml:"host" json:"host"`
+	Host     string `yaml:"host" json:"host"`
 	Facility string `yaml:"facility" json:"facility"`
-	Level   string `yaml:"level" json:"level"`
-	Message string `yaml:"message" json:"message"`
+	Tag      string `yaml:"tag" json:"tag"`
+	Level    string `yaml:"level" json:"level"`
+	Message  string `yaml:"message" json:"message"`
 }
 
 type ListenConfig struct {
@@ -123,21 +127,48 @@ func LoadConfig(path string) (Config, string, error) {
 		cfg.SMTP.Port = 587
 	}
 
-	// Validate alert rules
-	for i, rule := range cfg.Alerts {
-		if rule.Name == "" {
-			return Config{}, "", fmt.Errorf("alert rule %d: name is required", i)
-		}
-		if rule.Count == 0 {
-			return Config{}, "", fmt.Errorf("alert rule %q: count is required", rule.Name)
-		}
-		if rule.WindowMinutes == 0 {
-			return Config{}, "", fmt.Errorf("alert rule %q: window_minutes is required", rule.Name)
-		}
-		if rule.Level == "" {
-			return Config{}, "", fmt.Errorf("alert rule %q: level is required", rule.Name)
-		}
+	if err := ValidateConfig(cfg); err != nil {
+		return Config{}, "", err
 	}
 
 	return cfg, resolvedPath, nil
+}
+
+var validLevels = map[string]bool{
+	"emerg": true, "alert": true, "crit": true, "err": true,
+	"warning": true, "notice": true, "info": true, "debug": true,
+}
+
+func ValidateConfig(cfg Config) error {
+	if cfg.Retention < 1 {
+		return fmt.Errorf("retention must be at least 1 day")
+	}
+	for i, rule := range cfg.Alerts {
+		if rule.Name == "" {
+			return fmt.Errorf("alert rule %d: name is required", i)
+		}
+		if rule.Count == 0 {
+			return fmt.Errorf("alert rule %q: count is required", rule.Name)
+		}
+		if rule.WindowMinutes == 0 {
+			return fmt.Errorf("alert rule %q: window_minutes is required", rule.Name)
+		}
+		if rule.Level == "" {
+			return fmt.Errorf("alert rule %q: level is required", rule.Name)
+		}
+		if !validLevels[rule.Level] {
+			return fmt.Errorf("alert rule %q: invalid level %q", rule.Name, rule.Level)
+		}
+	}
+	for i, rule := range cfg.Ignore {
+		if rule.Level != "" && !validLevels[rule.Level] {
+			return fmt.Errorf("ignore rule %d: invalid level %q", i, rule.Level)
+		}
+		if rule.Message != "" {
+			if _, err := regexp.Compile(rule.Message); err != nil {
+				return fmt.Errorf("ignore rule %d: invalid message regex: %w", i, err)
+			}
+		}
+	}
+	return nil
 }

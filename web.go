@@ -38,6 +38,7 @@ type EditableConfig struct {
 	Alerts    []AlertRule  `json:"alerts"`
 	Ignore    []IgnoreRule `json:"ignore"`
 	Retention int          `json:"retention"`
+	Debug     bool         `json:"debug"`
 }
 
 func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
@@ -124,6 +125,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 				Alerts:    cfg.Alerts,
 				Ignore:    cfg.Ignore,
 				Retention: cfg.Retention,
+				Debug:     cfg.Debug,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(ec)
@@ -145,6 +147,13 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			cfg.Alerts = ec.Alerts
 			cfg.Ignore = ec.Ignore
 			cfg.Retention = ec.Retention
+			cfg.Debug = ec.Debug
+
+			if err := ValidateConfig(cfg); err != nil {
+				log.Printf("config validation error: %v", err)
+				http.Error(w, "invalid config: "+err.Error(), http.StatusBadRequest)
+				return
+			}
 
 			if err := cm.Update(cfg); err != nil {
 				http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)

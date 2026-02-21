@@ -148,8 +148,10 @@
       </div>
 
       <h3>General</h3>
-      <label>Retention (days)</label>
-      <input id="cfg-retention" type="number">
+      <div class="field-row">
+        <div><label>Retention (days)</label><input id="cfg-retention" type="number"></div>
+        <div><label>Debug logging</label><div style="padding:6px 0 4px"><input id="cfg-debug" type="checkbox"></div></div>
+      </div>
 
       <h3>Alert Rules</h3>
       <div id="alert-rules-container"></div>
@@ -317,6 +319,7 @@
           document.getElementById('cfg-smtp-from').value = cfg.smtp.from || '';
           document.getElementById('cfg-smtp-to').value = cfg.smtp.to || '';
           document.getElementById('cfg-retention').value = cfg.retention || 14;
+          document.getElementById('cfg-debug').checked = cfg.debug || false;
           renderAlertRules(cfg.alerts || []);
           renderIgnoreRules(cfg.ignore || []);
           document.getElementById('settings-modal').classList.add('open');
@@ -369,7 +372,7 @@
     }
 
     function addIgnoreRule() {
-      addIgnoreRuleDOM({host:'', facility:'', level:'', message:''});
+      addIgnoreRuleDOM({host:'', facility:'', tag:'', level:'', message:''});
     }
 
     function addIgnoreRuleDOM(r) {
@@ -380,6 +383,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="ir-host" value="' + esc(r.host) + '"></div>' +
         '<div><label>Facility</label><input class="ir-facility" value="' + esc(r.facility) + '"></div>' +
+        '<div><label>Tag</label><input class="ir-tag" value="' + esc(r.tag) + '"></div>' +
         '<div><label>Level</label><select class="ir-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
         '<label>Message (regex)</label><input class="ir-message" value="' + esc(r.message) + '" placeholder="e.g. CRON|systemd-.*">';
@@ -397,27 +401,45 @@
     }
 
     function saveSettings() {
+      var errors = [];
+
+      var retention = parseInt(document.getElementById('cfg-retention').value);
+      if (!retention || retention < 1) errors.push('Retention must be at least 1 day.');
+
       var alerts = [];
-      document.querySelectorAll('#alert-rules-container .rule-group').forEach(function(g) {
+      document.querySelectorAll('#alert-rules-container .rule-group').forEach(function(g, i) {
+        var name = g.querySelector('.ar-name').value;
+        var count = parseInt(g.querySelector('.ar-count').value);
+        var window = parseInt(g.querySelector('.ar-window').value);
+        if (!name) errors.push('Alert rule ' + (i+1) + ': name is required.');
+        if (!count || count < 1) errors.push('Alert rule "' + (name||i+1) + '": count must be at least 1.');
+        if (!window || window < 1) errors.push('Alert rule "' + (name||i+1) + '": window must be at least 1 minute.');
         alerts.push({
-          name: g.querySelector('.ar-name').value,
-          count: parseInt(g.querySelector('.ar-count').value) || 1,
-          window_minutes: parseInt(g.querySelector('.ar-window').value) || 5,
+          name: name,
+          count: count || 1,
+          window_minutes: window || 5,
           level: g.querySelector('.ar-level').value,
           above: g.querySelector('.ar-above').checked
         });
       });
 
       var ignore = [];
-      document.querySelectorAll('#ignore-rules-container .rule-group').forEach(function(g) {
+      document.querySelectorAll('#ignore-rules-container .rule-group').forEach(function(g, i) {
         var rule = {
           host: g.querySelector('.ir-host').value,
           facility: g.querySelector('.ir-facility').value,
+          tag: g.querySelector('.ir-tag').value,
           level: g.querySelector('.ir-level').value,
           message: g.querySelector('.ir-message').value
         };
-        if (rule.host || rule.facility || rule.level || rule.message) ignore.push(rule);
+        if (rule.message) {
+          try { new RegExp(rule.message); }
+          catch(e) { errors.push('Ignore rule ' + (i+1) + ': invalid message regex.'); }
+        }
+        if (rule.host || rule.facility || rule.tag || rule.level || rule.message) ignore.push(rule);
       });
+
+      if (errors.length > 0) { alert(errors.join('\n')); return; }
 
       var cfg = {
         smtp: {
@@ -430,7 +452,8 @@
         },
         alerts: alerts,
         ignore: ignore,
-        retention: parseInt(document.getElementById('cfg-retention').value) || 14
+        retention: retention || 14,
+        debug: document.getElementById('cfg-debug').checked
       };
 
       fetch('/api/config', {

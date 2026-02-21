@@ -3,10 +3,11 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 // Standard syslog facility names (RFC 5424)
@@ -55,8 +56,18 @@ type LogFilter struct {
 	Until    string
 }
 
+func init() {
+	sql.Register("sqlite3_regexp", &sqlite3.SQLiteDriver{
+		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+			return conn.RegisterFunc("regexp", func(pattern, s string) (bool, error) {
+				return regexp.MatchString(pattern, s)
+			}, true)
+		},
+	})
+}
+
 func InitDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open("sqlite3_regexp", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
@@ -188,6 +199,10 @@ func CountMatchingLogs(db *sql.DB, severity string, above bool, ignoreRules []Ig
 		if rule.Facility != "" {
 			parts = append(parts, "facility = ?")
 			ruleArgs = append(ruleArgs, rule.Facility)
+		}
+		if rule.Tag != "" {
+			parts = append(parts, "tag = ?")
+			ruleArgs = append(ruleArgs, rule.Tag)
 		}
 		if rule.Level != "" {
 			parts = append(parts, "severity = ?")

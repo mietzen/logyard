@@ -10,6 +10,14 @@ import (
 
 var version = "dev"
 
+var debugMode bool
+
+func debugf(format string, args ...interface{}) {
+	if debugMode {
+		log.Printf("[DEBUG] "+format, args...)
+	}
+}
+
 func main() {
 	configPath := flag.String("config", "", "path to config.yaml")
 	alertInterval := flag.Duration("alert-interval", 60*time.Second, "alert evaluation interval")
@@ -26,6 +34,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	debugMode = cfg.Debug
 	cm := NewConfigManager(cfg, cfgPath)
 
 	db, err := InitDB(cfg.DBPath)

@@ -20,7 +20,7 @@ Logyard looks for `config.yaml` in the current directory or `/etc/logyard/config
 
 ### Flags
 
-```
+```text
 -config string    Path to config.yaml
 -alert-interval   Alert evaluation interval (default 60s)
 ```
@@ -32,6 +32,7 @@ See [config.yaml.example](config.yaml.example) for a full example.
 ```yaml
 # db_path: ./logyard.db
 # retention: 14  # days
+# debug: false
 # web_addr: ":8080"
 
 listen:
@@ -59,8 +60,10 @@ alerts:
 ignore:
   - host: noisy-box.lan
   - facility: kern
+  - tag: CRON
   - host: proxmox
     level: warning
+  - message: "CRON|systemd-.*"
 ```
 
 ### Alert rules
@@ -70,6 +73,8 @@ Every alert rule requires `count`, `window_minutes`, and `level`. The alerter ch
 ### Ignore rules
 
 Each rule matches on all specified fields (AND). Multiple rules are OR'd. Ignore rules apply to alerting only -- all logs are stored and visible in the UI.
+
+The `message` field supports regular expressions using Go's [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (e.g. `CRON|systemd-.*`).
 
 ## Web UI
 
