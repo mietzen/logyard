@@ -66,6 +66,7 @@ jobs:
         echo ""
         docker buildx build \
           --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${ARCH}-${BUILD_NR}" \
+          --build-arg VERSION=${VERSION} \
           --platform ${PLATFORM} \
           --load \
           -f Dockerfile .
