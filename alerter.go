@@ -33,11 +33,17 @@ func evaluateAlerts(cfg Config, db *sql.DB) {
 	for _, rule := range cfg.Alerts {
 		since := time.Now().Add(-time.Duration(rule.WindowMinutes) * time.Minute)
 
+		if len(cfg.Ignore) > 0 {
+			debugf("alert %q: applying %d ignore rule(s)", rule.Name, len(cfg.Ignore))
+		}
+
 		count, err := CountMatchingLogs(db, rule.Level, rule.Above, cfg.Ignore, since)
 		if err != nil {
 			log.Printf("alert query error for %q: %v", rule.Name, err)
 			continue
 		}
+
+		debugf("alert %q: %d matching messages (threshold: %d)", rule.Name, count, rule.Count)
 
 		if count < rule.Count {
 			continue
@@ -51,8 +57,11 @@ func evaluateAlerts(cfg Config, db *sql.DB) {
 
 		// Cooldown: don't re-alert if we already alerted within the window
 		if !lastAlerted.IsZero() && lastAlerted.After(since) {
+			debugf("alert %q: skipping, already alerted at %s", rule.Name, lastAlerted.Format(time.RFC3339))
 			continue
 		}
+
+		debugf("alert %q: sending email to %s", rule.Name, cfg.SMTP.To)
 
 		if err := sendAlert(cfg.SMTP, rule, count); err != nil {
 			log.Printf("failed to send alert %q: %v", rule.Name, err)
