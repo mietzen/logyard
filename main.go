@@ -47,6 +47,12 @@ func main() {
 		log.Fatalf("Failed to start syslog receiver: %v", err)
 	}
 
+	if cfg.Docker.Enabled {
+		if err := StartDockerReceiver(cfg.Docker, db); err != nil {
+			log.Fatalf("Failed to start Docker receiver: %v", err)
+		}
+	}
+
 	StartAlerter(cm, db, *alertInterval)
 
 	log.Fatal(StartWeb(cfg.WebAddr, db, cm))

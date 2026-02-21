@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"sync"
@@ -50,6 +51,7 @@ type Config struct {
 	DBPath    string       `yaml:"db_path"`
 	Listen    ListenConfig `yaml:"listen"`
 	WebAddr   string       `yaml:"web_addr"`
+	Docker    DockerConfig `yaml:"docker"`
 }
 
 type SMTPConfig struct {
@@ -80,6 +82,11 @@ type IgnoreRule struct {
 type ListenConfig struct {
 	UDP string `yaml:"udp"`
 	TCP string `yaml:"tcp"`
+}
+
+type DockerConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Socket  string `yaml:"socket"`
 }
 
 func LoadConfig(path string) (Config, string, error) {
@@ -168,6 +175,21 @@ func ValidateConfig(cfg Config) error {
 			if _, err := regexp.Compile(rule.Message); err != nil {
 				return fmt.Errorf("ignore rule %d: invalid message regex: %w", i, err)
 			}
+		}
+	}
+	if cfg.Docker.Enabled {
+		if cfg.Docker.Socket == "" {
+			return fmt.Errorf("docker: socket is required when enabled")
+		}
+		u, err := url.Parse(cfg.Docker.Socket)
+		if err != nil {
+			return fmt.Errorf("docker: invalid socket URL: %w", err)
+		}
+		if u.Scheme != "unix" && u.Scheme != "tcp" {
+			return fmt.Errorf("docker: socket scheme must be unix or tcp, got %q", u.Scheme)
+		}
+		if u.Scheme == "tcp" && u.Host == "" {
+			return fmt.Errorf("docker: tcp socket requires a host")
 		}
 	}
 	return nil

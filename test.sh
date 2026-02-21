@@ -3,7 +3,7 @@ set -euo pipefail
 
 cleanup() {
     echo "Cleaning up..."
-    docker rm -f logyard-test mailpit-test 2>/dev/null || true
+    docker rm -f logyard-test logyard-test-docker logyard-test-docker-proxy mailpit-test docker-stdout-test docker-stderr-test docker-lifecycle-test docker-proxy-stdout-test socket-proxy-test 2>/dev/null || true
     docker network rm logyard-testnet 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -357,6 +357,208 @@ echo "PASS: Bad ignore regex rejected"
 curl -s -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
     -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"test-warning-alert","count":1,"window_minutes":5,"level":"warning"}],"ignore":[],"retention":1,"debug":true}' > /dev/null
+
+echo ""
+echo "========================================="
+echo "=== Docker Log Ingestion Tests        ==="
+echo "========================================="
+echo ""
+
+echo "=== Starting logyard with Docker socket ==="
+DOCKER_TMPDIR=$(mktemp -d)
+cat > "$DOCKER_TMPDIR/config.yaml" << 'YAML'
+db_path: /data/test-docker-logyard.db
+retention: 1
+debug: true
+
+listen:
+  udp: ":1514"
+  tcp: ":1515"
+
+web_addr: ":8081"
+
+smtp:
+  host: mailpit-test
+  port: 1025
+  from: alerts@test.local
+  to: admin@test.local
+
+alerts: []
+ignore: []
+
+docker:
+  enabled: true
+  socket: "unix:///var/run/docker.sock"
+YAML
+
+docker run -d --name logyard-test-docker --network logyard-testnet \
+    -v "$DOCKER_TMPDIR/config.yaml":/data/config.yaml \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro \
+    -p 8081:8081 \
+    logyard-test -config /data/config.yaml
+sleep 3
+echo "Installing sqlite3 in Docker test container..."
+docker exec logyard-test-docker sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1'
+
+echo "=== Running test container with stdout ==="
+docker run --name docker-stdout-test --network logyard-testnet \
+    debian bash -c 'for i in 1 2 3; do echo "docker-stdout-line-$i"; sleep 0.5; done'
+sleep 2
+
+echo "=== Running test container with stderr ==="
+docker run --name docker-stderr-test --network logyard-testnet \
+    debian bash -c 'for i in 1 2 3; do echo "docker-stderr-line-$i" >&2; sleep 0.5; done'
+sleep 2
+
+echo "=== Checking Docker stdout logs ==="
+DOCKER_STDOUT_COUNT=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT count(*) FROM logs WHERE facility='docker' AND severity='info' AND message LIKE '%docker-stdout-line%';\"")
+echo "Docker stdout log count: $DOCKER_STDOUT_COUNT"
+if [ "$DOCKER_STDOUT_COUNT" -lt 3 ]; then
+    echo "FAIL: Expected at least 3 docker stdout logs, got $DOCKER_STDOUT_COUNT"
+    docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT * FROM logs WHERE facility='docker';\""
+    docker logs logyard-test-docker
+    exit 1
+fi
+echo "PASS: Docker stdout logs captured with severity=info"
+
+echo "=== Checking Docker stderr logs ==="
+DOCKER_STDERR_COUNT=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT count(*) FROM logs WHERE facility='docker' AND severity='err' AND message LIKE '%docker-stderr-line%';\"")
+echo "Docker stderr log count: $DOCKER_STDERR_COUNT"
+if [ "$DOCKER_STDERR_COUNT" -lt 3 ]; then
+    echo "FAIL: Expected at least 3 docker stderr logs, got $DOCKER_STDERR_COUNT"
+    docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT * FROM logs WHERE facility='docker';\""
+    docker logs logyard-test-docker
+    exit 1
+fi
+echo "PASS: Docker stderr logs captured with severity=err"
+
+echo "=== Checking Docker log tag (container name) ==="
+DOCKER_TAG=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT DISTINCT tag FROM logs WHERE message LIKE '%docker-stdout-line%';\"")
+echo "Docker log tag: $DOCKER_TAG"
+if [ "$DOCKER_TAG" != "docker-stdout-test" ]; then
+    echo "FAIL: Expected tag 'docker-stdout-test', got '$DOCKER_TAG'"
+    exit 1
+fi
+echo "PASS: Docker log tag matches container name"
+
+echo "=== Checking Docker log host ==="
+DOCKER_HOST_VAL=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT DISTINCT host FROM logs WHERE message LIKE '%docker-stdout-line%';\"")
+echo "Docker log host: $DOCKER_HOST_VAL"
+if [ "$DOCKER_HOST_VAL" != "localhost" ]; then
+    echo "FAIL: Expected host 'localhost' for unix socket, got '$DOCKER_HOST_VAL'"
+    exit 1
+fi
+echo "PASS: Docker log host is 'localhost' for unix socket"
+
+echo "=== Testing container lifecycle (new container detected via events) ==="
+docker run --name docker-lifecycle-test --network logyard-testnet \
+    debian bash -c 'echo "lifecycle-test-message"; echo "lifecycle-err-message" >&2'
+sleep 3
+
+LIFECYCLE_STDOUT=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT count(*) FROM logs WHERE tag='docker-lifecycle-test' AND severity='info' AND message LIKE '%lifecycle-test-message%';\"")
+LIFECYCLE_STDERR=$(docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT count(*) FROM logs WHERE tag='docker-lifecycle-test' AND severity='err' AND message LIKE '%lifecycle-err-message%';\"")
+echo "Lifecycle stdout: $LIFECYCLE_STDOUT, stderr: $LIFECYCLE_STDERR"
+if [ "$LIFECYCLE_STDOUT" -lt 1 ] || [ "$LIFECYCLE_STDERR" -lt 1 ]; then
+    echo "FAIL: Lifecycle container logs not captured"
+    docker exec logyard-test-docker sh -c "sqlite3 /data/test-docker-logyard.db \"SELECT * FROM logs WHERE tag='docker-lifecycle-test';\""
+    docker logs logyard-test-docker
+    exit 1
+fi
+echo "PASS: New container detected via /events and logs captured"
+
+echo "=== Checking Web API includes Docker logs ==="
+DOCKER_API=$(curl -s http://127.0.0.1:8081/api/logs)
+if ! echo "$DOCKER_API" | grep -q "docker-stdout-line"; then
+    echo "FAIL: Docker stdout logs not in API response"
+    echo "$DOCKER_API"
+    exit 1
+fi
+if ! echo "$DOCKER_API" | grep -q "docker-stderr-line"; then
+    echo "FAIL: Docker stderr logs not in API response"
+    echo "$DOCKER_API"
+    exit 1
+fi
+echo "PASS: Docker logs visible in Web API"
+
+docker rm -f logyard-test-docker 2>/dev/null || true
+
+echo ""
+echo "========================================="
+echo "=== Docker Socket-Proxy Tests         ==="
+echo "========================================="
+echo ""
+
+echo "=== Starting docker-socket-proxy ==="
+docker run -d --name socket-proxy-test --network logyard-testnet \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro \
+    -e CONTAINERS=1 \
+    -e POST=0 \
+    tecnativa/docker-socket-proxy
+
+sleep 2
+
+echo "=== Starting logyard with socket-proxy ==="
+PROXY_TMPDIR=$(mktemp -d)
+cat > "$PROXY_TMPDIR/config.yaml" << 'YAML'
+db_path: /data/test-proxy-logyard.db
+retention: 1
+debug: true
+
+listen:
+  udp: ":1516"
+  tcp: ":1517"
+
+web_addr: ":8082"
+
+smtp:
+  host: mailpit-test
+  port: 1025
+  from: alerts@test.local
+  to: admin@test.local
+
+alerts: []
+ignore: []
+
+docker:
+  enabled: true
+  socket: "tcp://socket-proxy-test:2375"
+YAML
+
+docker run -d --name logyard-test-docker-proxy --network logyard-testnet \
+    -v "$PROXY_TMPDIR/config.yaml":/data/config.yaml \
+    -p 8082:8082 \
+    logyard-test -config /data/config.yaml
+sleep 3
+echo "Installing sqlite3 in proxy test container..."
+docker exec logyard-test-docker-proxy sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1'
+
+echo "=== Running test container for socket-proxy ==="
+docker run --name docker-proxy-stdout-test --network logyard-testnet \
+    debian bash -c 'echo "proxy-stdout-msg"; echo "proxy-stderr-msg" >&2'
+sleep 3
+
+echo "=== Checking socket-proxy Docker logs ==="
+PROXY_STDOUT=$(docker exec logyard-test-docker-proxy sh -c "sqlite3 /data/test-proxy-logyard.db \"SELECT count(*) FROM logs WHERE facility='docker' AND severity='info' AND message LIKE '%proxy-stdout-msg%';\"")
+PROXY_STDERR=$(docker exec logyard-test-docker-proxy sh -c "sqlite3 /data/test-proxy-logyard.db \"SELECT count(*) FROM logs WHERE facility='docker' AND severity='err' AND message LIKE '%proxy-stderr-msg%';\"")
+echo "Proxy stdout: $PROXY_STDOUT, stderr: $PROXY_STDERR"
+if [ "$PROXY_STDOUT" -lt 1 ] || [ "$PROXY_STDERR" -lt 1 ]; then
+    echo "FAIL: Socket-proxy Docker logs not captured"
+    docker exec logyard-test-docker-proxy sh -c "sqlite3 /data/test-proxy-logyard.db \"SELECT * FROM logs WHERE facility='docker';\""
+    docker logs logyard-test-docker-proxy
+    exit 1
+fi
+echo "PASS: Docker logs captured via socket-proxy"
+
+echo "=== Checking socket-proxy host field ==="
+PROXY_HOST=$(docker exec logyard-test-docker-proxy sh -c "sqlite3 /data/test-proxy-logyard.db \"SELECT DISTINCT host FROM logs WHERE message LIKE '%proxy-stdout-msg%';\"")
+echo "Proxy host: $PROXY_HOST"
+if [ "$PROXY_HOST" != "socket-proxy-test" ]; then
+    echo "FAIL: Expected host 'socket-proxy-test' for tcp socket, got '$PROXY_HOST'"
+    exit 1
+fi
+echo "PASS: Docker log host derived from TCP address"
+
+docker rm -f logyard-test-docker-proxy socket-proxy-test 2>/dev/null || true
 
 echo ""
 echo "=== All tests passed ==="
