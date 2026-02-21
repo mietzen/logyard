@@ -3,7 +3,9 @@ package main
 import (
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 )
@@ -30,7 +32,15 @@ var rowsTemplate = template.Must(template.New("rows").Parse(`
 // Suppress unused import for embed.
 var _ embed.FS
 
-func StartWeb(addr string, db *sql.DB) error {
+// EditableConfig is the subset of Config exposed via the settings API.
+type EditableConfig struct {
+	SMTP      SMTPConfig   `json:"smtp"`
+	Alerts    []AlertRule  `json:"alerts"`
+	Ignore    []IgnoreRule `json:"ignore"`
+	Retention int          `json:"retention"`
+}
+
+func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +75,8 @@ func StartWeb(addr string, db *sql.DB) error {
 			Severity: q.Get("severity"),
 			Tag:      q.Get("tag"),
 			Search:   q.Get("search"),
+			Since:    q.Get("since"),
+			Until:    q.Get("until"),
 		}
 
 		entries, err := QueryLogs(db, filter, 200)
@@ -77,6 +89,63 @@ func StartWeb(addr string, db *sql.DB) error {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := rowsTemplate.Execute(w, entries); err != nil {
 			log.Printf("template error: %v", err)
+		}
+	})
+
+	mux.HandleFunc("/api/filters", func(w http.ResponseWriter, r *http.Request) {
+		hosts, _ := DistinctValues(db, "host")
+		facilities, _ := DistinctValues(db, "facility")
+		tags, _ := DistinctValues(db, "tag")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{
+			"hosts":      hosts,
+			"facilities": facilities,
+			"tags":       tags,
+		})
+	})
+
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			cfg := cm.Get()
+			ec := EditableConfig{
+				SMTP:      cfg.SMTP,
+				Alerts:    cfg.Alerts,
+				Ignore:    cfg.Ignore,
+				Retention: cfg.Retention,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(ec)
+
+		case http.MethodPut:
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "read body failed", http.StatusBadRequest)
+				return
+			}
+			var ec EditableConfig
+			if err := json.Unmarshal(body, &ec); err != nil {
+				http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			cfg := cm.Get()
+			cfg.SMTP = ec.SMTP
+			cfg.Alerts = ec.Alerts
+			cfg.Ignore = ec.Ignore
+			cfg.Retention = ec.Retention
+
+			if err := cm.Update(cfg); err != nil {
+				http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 

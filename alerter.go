@@ -11,21 +11,22 @@ import (
 	"time"
 )
 
-func StartAlerter(cfg Config, db *sql.DB, alertInterval time.Duration) {
+func StartAlerter(cm *ConfigManager, db *sql.DB, alertInterval time.Duration) {
+	cfg := cm.Get()
 	if len(cfg.Alerts) == 0 {
 		log.Println("No alert rules configured, alerter disabled")
-		return
 	}
 
 	ticker := time.NewTicker(alertInterval)
 	go func() {
 		for range ticker.C {
-			evaluateAlerts(cfg, db)
-			purgeOldLogs(cfg.Retention, db)
+			c := cm.Get()
+			evaluateAlerts(c, db)
+			purgeOldLogs(c.Retention, db)
 		}
 	}()
 
-	log.Printf("Alerter started with %d rules, checking every %s", len(cfg.Alerts), alertInterval)
+	log.Printf("Alerter started, checking every %s", alertInterval)
 }
 
 func evaluateAlerts(cfg Config, db *sql.DB) {

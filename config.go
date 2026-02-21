@@ -3,9 +3,41 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
+
+type ConfigManager struct {
+	mu   sync.RWMutex
+	cfg  Config
+	path string
+}
+
+func NewConfigManager(cfg Config, path string) *ConfigManager {
+	return &ConfigManager{cfg: cfg, path: path}
+}
+
+func (cm *ConfigManager) Get() Config {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.cfg
+}
+
+func (cm *ConfigManager) Update(cfg Config) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	data, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	if err := os.WriteFile(cm.path, data, 0644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+	cm.cfg = cfg
+	return nil
+}
 
 type Config struct {
 	SMTP      SMTPConfig   `yaml:"smtp"`
@@ -18,25 +50,25 @@ type Config struct {
 }
 
 type SMTPConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	From     string `yaml:"from"`
-	To       string `yaml:"to"`
+	Host     string `yaml:"host" json:"host"`
+	Port     int    `yaml:"port" json:"port"`
+	User     string `yaml:"user" json:"user"`
+	Password string `yaml:"password" json:"password"`
+	From     string `yaml:"from" json:"from"`
+	To       string `yaml:"to" json:"to"`
 }
 
 type AlertRule struct {
-	Name          string `yaml:"name"`
-	Count         int    `yaml:"count"`
-	WindowMinutes int    `yaml:"window_minutes"`
-	Level         string `yaml:"level"`
+	Name          string `yaml:"name" json:"name"`
+	Count         int    `yaml:"count" json:"count"`
+	WindowMinutes int    `yaml:"window_minutes" json:"window_minutes"`
+	Level         string `yaml:"level" json:"level"`
 }
 
 type IgnoreRule struct {
-	Host     string `yaml:"host"`
-	Facility string `yaml:"facility"`
-	Level    string `yaml:"level"`
+	Host     string `yaml:"host" json:"host"`
+	Facility string `yaml:"facility" json:"facility"`
+	Level    string `yaml:"level" json:"level"`
 }
 
 type ListenConfig struct {
@@ -44,27 +76,29 @@ type ListenConfig struct {
 	TCP string `yaml:"tcp"`
 }
 
-func LoadConfig(path string) (Config, error) {
+func LoadConfig(path string) (Config, string, error) {
 	candidates := []string{path, "./config.yaml", "/etc/logyard/config.yaml"}
 
 	var data []byte
 	var err error
+	var resolvedPath string
 	for _, p := range candidates {
 		if p == "" {
 			continue
 		}
 		data, err = os.ReadFile(p)
 		if err == nil {
+			resolvedPath = p
 			break
 		}
 	}
 	if data == nil {
-		return Config{}, fmt.Errorf("no config file found")
+		return Config{}, "", fmt.Errorf("no config file found")
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parsing config: %w", err)
+		return Config{}, "", fmt.Errorf("parsing config: %w", err)
 	}
 
 	// Defaults
@@ -90,18 +124,18 @@ func LoadConfig(path string) (Config, error) {
 	// Validate alert rules
 	for i, rule := range cfg.Alerts {
 		if rule.Name == "" {
-			return Config{}, fmt.Errorf("alert rule %d: name is required", i)
+			return Config{}, "", fmt.Errorf("alert rule %d: name is required", i)
 		}
 		if rule.Count == 0 {
-			return Config{}, fmt.Errorf("alert rule %q: count is required", rule.Name)
+			return Config{}, "", fmt.Errorf("alert rule %q: count is required", rule.Name)
 		}
 		if rule.WindowMinutes == 0 {
-			return Config{}, fmt.Errorf("alert rule %q: window_minutes is required", rule.Name)
+			return Config{}, "", fmt.Errorf("alert rule %q: window_minutes is required", rule.Name)
 		}
 		if rule.Level == "" {
-			return Config{}, fmt.Errorf("alert rule %q: level is required", rule.Name)
+			return Config{}, "", fmt.Errorf("alert rule %q: level is required", rule.Name)
 		}
 	}
 
-	return cfg, nil
+	return cfg, resolvedPath, nil
 }
