@@ -10,19 +10,29 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #1a1a2e; color: #e0e0e0; font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 13px; }
     header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #16213e; border-bottom: 1px solid #0f3460; }
-    header h1 { font-size: 18px; }
-    .gear-btn { background: none; border: none; color: #a0a0a0; cursor: pointer; font-size: 20px; padding: 4px 8px; }
-    .gear-btn:hover { color: #e94560; }
+    header h1 { font-size: 18px; display: flex; align-items: center; gap: 0; }
+    .icon-btn { background: none; border: none; cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+    .icon-btn svg { width: 16px; height: 16px; fill: #e0e0e0; }
+    .icon-btn:hover svg { fill: #e94560; }
+    .play-pause { margin-right: 8px; }
+    .gear-btn { margin-left: 8px; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .status-dot.live { background: #4caf50; animation: pulse 2s infinite; }
+    .status-dot.paused { background: #ff9800; }
+    .status-dot.loading { animation: pulse 0.5s infinite; background: #4caf50; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; }
     .filters select, .filters input { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
     .filters select:focus, .filters input:focus { outline: none; border-color: #e94560; }
     .filters button { background: #e94560; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
     .filters button:hover { background: #c73652; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { position: sticky; top: 0; background: #16213e; }
-    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; }
-    td { padding: 4px 10px; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 600px; }
-    td:last-child { white-space: normal; max-width: none; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; overflow: hidden; }
+    .col-resize { position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; }
+    .col-resize:hover, .col-resize.active { background: #e94560; }
+    td { padding: 4px 10px; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    td:last-child { white-space: normal; }
     tr:hover { background: #16213e; }
     .sev-emerg, .sev-alert { background: #4a0000; color: #ff4444; }
     .sev-crit { background: #3a0000; color: #ff6666; }
@@ -31,22 +41,22 @@
     .sev-notice { color: #66ccff; }
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
-    .play-pause { background: none; border: none; cursor: pointer; font-size: 18px; margin-right: 8px; vertical-align: middle; line-height: 1; padding: 0; }
-    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-    .status-dot.live { background: #4caf50; animation: pulse 2s infinite; }
-    .status-dot.paused { background: #ff9800; }
-    .status-dot.loading { animation: pulse 0.5s infinite; background: #4caf50; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
     /* Settings modal */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: flex-start; padding-top: 60px; }
     .modal-overlay.open { display: flex; }
-    .modal { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; width: 700px; max-width: 90vw; max-height: 80vh; overflow-y: auto; padding: 20px; }
+    .modal { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; width: 700px; max-width: 90vw; max-height: 80vh; overflow-y: auto; padding: 20px; position: relative; }
+    .modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: #a0a0a0; cursor: pointer; font-size: 20px; line-height: 1; padding: 4px; }
+    .modal-close:hover { color: #e94560; }
     .modal h2 { margin-bottom: 16px; font-size: 16px; color: #e94560; }
     .modal h3 { margin: 16px 0 8px; font-size: 13px; color: #66ccff; border-bottom: 1px solid #0f3460; padding-bottom: 4px; }
     .modal label { display: block; margin: 6px 0 2px; font-size: 11px; color: #a0a0a0; text-transform: uppercase; }
     .modal input, .modal select { width: 100%; background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 4px; }
     .modal input:focus, .modal select:focus { outline: none; border-color: #e94560; }
+    /* Hide number input spinners */
+    .modal input[type="number"] { -moz-appearance: textfield; }
+    .modal input[type="number"]::-webkit-outer-spin-button,
+    .modal input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid #0f3460; }
     .modal-actions button { padding: 8px 20px; border-radius: 4px; border: none; cursor: pointer; font-family: inherit; font-size: 12px; }
     .btn-save { background: #e94560; color: #fff; }
@@ -60,12 +70,22 @@
     .add-btn:hover { background: #1a4a7a; }
     .field-row { display: flex; gap: 8px; }
     .field-row > div { flex: 1; }
+    /* Checkbox styled to match add-btn color scheme */
+    .modal input[type="checkbox"] { width: auto; margin: 0; accent-color: #0f3460; }
   </style>
 </head>
 <body>
   <header>
-    <h1><button class="play-pause" id="play-pause-btn" onclick="togglePause()" title="Pause live updates">&#9616;&#9616;</button><span class="status-dot live" id="status-dot"></span>Logyard</h1>
-    <button class="gear-btn" onclick="openSettings()" title="Settings">&#9881;</button>
+    <h1>
+      <button class="icon-btn play-pause" id="play-pause-btn" onclick="togglePause()" title="Pause live updates">
+        <svg id="pause-icon" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+        <svg id="play-icon" viewBox="0 0 24 24" style="display:none"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+      </button>
+      <span class="status-dot live" id="status-dot"></span>Logyard
+    </h1>
+    <button class="icon-btn gear-btn" onclick="openSettings()" title="Settings">
+      <svg viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.04 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
+    </button>
   </header>
   <form class="filters" id="log-form"
         hx-get="/api/logs"
@@ -76,19 +96,19 @@
     <select name="facility" id="filter-facility"><option value="">All facilities</option></select>
     <select name="severity" id="filter-severity">
       <option value="">All severities</option>
-      <option value="emerg">emerg & above</option>
-      <option value="alert">alert & above</option>
-      <option value="crit">crit & above</option>
-      <option value="err">err & above</option>
-      <option value="warning">warning & above</option>
-      <option value="notice">notice & above</option>
-      <option value="info">info & above</option>
-      <option value="debug">debug (all)</option>
+      <option value="emerg">emerg</option>
+      <option value="alert">alert</option>
+      <option value="crit">crit</option>
+      <option value="err">err</option>
+      <option value="warning">warning</option>
+      <option value="notice">notice</option>
+      <option value="info">info</option>
+      <option value="debug">debug</option>
     </select>
     <select name="tag" id="filter-tag"><option value="">All tags</option></select>
     <select id="time-preset" onchange="handleTimePreset(this.value)">
       <option value="">All time</option>
-      <option value="5">Last 5 min</option>
+      <option value="5" selected>Last 5 min</option>
       <option value="15">Last 15 min</option>
       <option value="60">Last 1 hour</option>
       <option value="360">Last 6 hours</option>
@@ -104,16 +124,16 @@
   <table>
     <thead>
       <tr>
-        <th>Time</th>
-        <th>Host</th>
-        <th>Facility</th>
-        <th>Severity</th>
-        <th>Tag</th>
+        <th style="width:150px">Time<span class="col-resize"></span></th>
+        <th style="width:120px">Host<span class="col-resize"></span></th>
+        <th style="width:80px">Facility<span class="col-resize"></span></th>
+        <th style="width:80px">Severity<span class="col-resize"></span></th>
+        <th style="width:100px">Tag<span class="col-resize"></span></th>
         <th>Message</th>
       </tr>
     </thead>
     <tbody id="log-body"
-           hx-get="/api/logs"
+           hx-get="/api/logs?since="
            hx-trigger="load"
            hx-swap="innerHTML">
     </tbody>
@@ -122,6 +142,7 @@
   <!-- Settings Modal -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal">
+      <button class="modal-close" onclick="closeSettings()" title="Close">&times;</button>
       <h2>Settings</h2>
 
       <h3>SMTP</h3>
@@ -163,17 +184,20 @@
 
     function togglePause() {
       paused = !paused;
-      const btn = document.getElementById('play-pause-btn');
-      const dot = document.getElementById('status-dot');
       const form = document.getElementById('log-form');
+      const dot = document.getElementById('status-dot');
+      const playIcon = document.getElementById('play-icon');
+      const pauseIcon = document.getElementById('pause-icon');
       if (paused) {
-        btn.innerHTML = '&#9654;';
-        btn.title = 'Resume live updates';
+        playIcon.style.display = '';
+        pauseIcon.style.display = 'none';
+        document.getElementById('play-pause-btn').title = 'Resume live updates';
         dot.className = 'status-dot paused';
         form.setAttribute('hx-trigger', 'submit');
       } else {
-        btn.innerHTML = '&#9616;&#9616;';
-        btn.title = 'Pause live updates';
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = '';
+        document.getElementById('play-pause-btn').title = 'Pause live updates';
         dot.className = 'status-dot live';
         form.setAttribute('hx-trigger', 'submit, every 3s');
         htmx.trigger(form, 'submit');
@@ -222,6 +246,12 @@
     // Refresh filter options every 30s
     loadFilters();
     setInterval(loadFilters, 30000);
+
+    // Initialize default time filter (Last 5 min)
+    (function() {
+      const d = new Date(Date.now() - 5 * 60000);
+      document.getElementById('filter-since').value = d.toISOString().slice(0, 19);
+    })();
 
     // Time filter
     function handleTimePreset(val) {
@@ -303,7 +333,7 @@
         '<div class="field-row">' +
         '<div><label>Name</label><input class="ar-name" value="' + esc(r.name) + '"></div>' +
         '<div><label>Level</label><select class="ar-level">' + severityOptions(r.level) + '</select></div>' +
-        '<div style="display:flex;align-items:flex-end;padding-bottom:6px"><label style="display:inline;margin:0"><input class="ar-above" type="checkbox"' + (r.above ? ' checked' : '') + '> & above</label></div>' +
+        '<div><label>&amp; above</label><div style="padding:6px 0 4px"><input class="ar-above" type="checkbox"' + (r.above ? ' checked' : '') + '></div></div>' +
         '</div>' +
         '<div class="field-row">' +
         '<div><label>Count</label><input class="ar-count" type="number" value="' + (r.count||1) + '"></div>' +
@@ -392,6 +422,27 @@
       })
       .catch(err => alert('Save failed: ' + err.message));
     }
+
+    // Column resize
+    document.querySelectorAll('.col-resize').forEach(handle => {
+      handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        const th = this.parentElement;
+        const startX = e.pageX;
+        const startW = th.offsetWidth;
+        this.classList.add('active');
+        function onMove(e) {
+          th.style.width = Math.max(40, startW + e.pageX - startX) + 'px';
+        }
+        function onUp() {
+          handle.classList.remove('active');
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
   </script>
 </body>
 </html>
