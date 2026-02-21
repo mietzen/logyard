@@ -145,7 +145,7 @@ func TestFollowDockerLogs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	followDockerLogs(server.Client(), server.URL, "test-id", "test-container", "docker-host", db)
+	followDockerLogs(server.Client(), server.URL, "test-id", "test-container", "docker-host", "0", db)
 
 	// Verify logs were inserted
 	entries, err := QueryLogs(db, LogFilter{}, 100)
@@ -225,7 +225,7 @@ func TestFollowDockerLogs_RetryOnDrop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	followDockerLogs(server.Client(), server.URL, "retry-id", "retry-container", "test-host", db)
+	followDockerLogs(server.Client(), server.URL, "retry-id", "retry-container", "test-host", "0", db)
 
 	entries, err := QueryLogs(db, LogFilter{}, 100)
 	if err != nil {
