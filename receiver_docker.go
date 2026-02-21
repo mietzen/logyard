@@ -142,6 +142,16 @@ func watchDockerEvents(client *http.Client, baseURL string, onStart func(id, nam
 		if backoff < 30*time.Second {
 			backoff *= 2
 		}
+
+		// Re-list containers on reconnect to catch any we missed
+		containers, err := listContainers(client, baseURL)
+		if err != nil {
+			debugf("Docker: failed to re-list containers: %v", err)
+			continue
+		}
+		for _, c := range containers {
+			onStart(c.ID, containerName(c))
+		}
 	}
 }
 
@@ -178,20 +188,49 @@ func streamDockerEvents(client *http.Client, baseURL string, onStart func(id, na
 
 func followDockerLogs(client *http.Client, baseURL, containerID, name, host string, db *sql.DB) {
 	since := fmt.Sprintf("%d", time.Now().Unix())
+	backoff := time.Second
+
+	for {
+		err := streamDockerLogs(client, baseURL, containerID, name, host, since, db)
+		if err == nil {
+			// Clean EOF — container stopped normally
+			debugf("Docker: container %s stopped", name)
+			return
+		}
+
+		// Check if container still exists
+		if isContainerGone(client, baseURL, containerID) {
+			debugf("Docker: container %s no longer exists", name)
+			return
+		}
+
+		debugf("Docker: log stream for %s interrupted: %v (reconnecting in %v)", name, err, backoff)
+		time.Sleep(backoff)
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+
+		// Update since to avoid replaying logs
+		since = fmt.Sprintf("%d", time.Now().Unix())
+	}
+}
+
+func streamDockerLogs(client *http.Client, baseURL, containerID, name, host, since string, db *sql.DB) error {
 	logURL := fmt.Sprintf("%s/containers/%s/logs?follow=true&stdout=true&stderr=true&timestamps=true&since=%s",
 		baseURL, containerID, since)
 
 	resp, err := client.Get(logURL)
 	if err != nil {
-		debugf("Docker: failed to follow logs for %s: %v", name, err)
-		return
+		return err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil // container gone
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		debugf("Docker: log stream for %s returned status %d: %s", name, resp.StatusCode, body)
-		return
+		return fmt.Errorf("status %d: %s", resp.StatusCode, body)
 	}
 
 	reader := bufio.NewReader(resp.Body)
@@ -199,10 +238,10 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 
 	for {
 		if _, err := io.ReadFull(reader, header); err != nil {
-			if err != io.EOF {
-				debugf("Docker: log stream ended for %s: %v", name, err)
+			if err == io.EOF {
+				return nil // clean end — container stopped
 			}
-			return
+			return err // connection dropped — will retry
 		}
 
 		streamType := header[0]
@@ -210,8 +249,7 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 
 		payload := make([]byte, frameSize)
 		if _, err := io.ReadFull(reader, payload); err != nil {
-			debugf("Docker: incomplete frame for %s: %v", name, err)
-			return
+			return err
 		}
 
 		severity := "info"
@@ -227,6 +265,16 @@ func followDockerLogs(client *http.Client, baseURL, containerID, name, host stri
 			log.Printf("Docker: insert error for %s: %v", name, err)
 		}
 	}
+}
+
+func isContainerGone(client *http.Client, baseURL, containerID string) bool {
+	resp, err := client.Get(fmt.Sprintf("%s/containers/%s/json", baseURL, containerID))
+	if err != nil {
+		return false // can't tell, assume still there
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode == http.StatusNotFound
 }
 
 func parseDockerTimestamp(line string) (time.Time, string) {
