@@ -24,6 +24,17 @@ var severityNames = map[int]string{
 	4: "warning", 5: "notice", 6: "info", 7: "debug",
 }
 
+var severityOrder = []string{"emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"}
+
+func severitiesAtOrAbove(level string) []string {
+	for i, s := range severityOrder {
+		if s == level {
+			return severityOrder[:i+1]
+		}
+	}
+	return []string{level}
+}
+
 type LogEntry struct {
 	ID        int64
 	Timestamp time.Time
@@ -40,6 +51,8 @@ type LogFilter struct {
 	Severity string
 	Tag      string
 	Search   string
+	Since    string
+	Until    string
 }
 
 func InitDB(path string) (*sql.DB, error) {
@@ -94,8 +107,15 @@ func QueryLogs(db *sql.DB, filter LogFilter, limit int) ([]LogEntry, error) {
 		args = append(args, filter.Facility)
 	}
 	if filter.Severity != "" {
-		conditions = append(conditions, "severity = ?")
-		args = append(args, filter.Severity)
+		sevs := severitiesAtOrAbove(filter.Severity)
+		if len(sevs) > 0 {
+			placeholders := make([]string, len(sevs))
+			for i, s := range sevs {
+				placeholders[i] = "?"
+				args = append(args, s)
+			}
+			conditions = append(conditions, "severity IN ("+strings.Join(placeholders, ",")+")")
+		}
 	}
 	if filter.Tag != "" {
 		conditions = append(conditions, "tag = ?")
@@ -104,6 +124,14 @@ func QueryLogs(db *sql.DB, filter LogFilter, limit int) ([]LogEntry, error) {
 	if filter.Search != "" {
 		conditions = append(conditions, "message LIKE ?")
 		args = append(args, "%"+filter.Search+"%")
+	}
+	if filter.Since != "" {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, filter.Since)
+	}
+	if filter.Until != "" {
+		conditions = append(conditions, "timestamp <= ?")
+		args = append(args, filter.Until)
 	}
 
 	query := "SELECT id, timestamp, host, facility, severity, tag, message FROM logs"
@@ -183,6 +211,25 @@ func SetLastAlerted(db *sql.DB, ruleName string, t time.Time) error {
 		ruleName, t, t,
 	)
 	return err
+}
+
+func DistinctValues(db *sql.DB, column string) ([]string, error) {
+	query := fmt.Sprintf("SELECT DISTINCT %s FROM logs WHERE %s != '' ORDER BY %s", column, column, column)
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var values []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, rows.Err()
 }
 
 func PurgeLogs(db *sql.DB, retentionDays int) (int64, error) {

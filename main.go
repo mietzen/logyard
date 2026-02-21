@@ -21,10 +21,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	cfg, err := LoadConfig(*configPath)
+	cfg, cfgPath, err := LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	cm := NewConfigManager(cfg, cfgPath)
 
 	db, err := InitDB(cfg.DBPath)
 	if err != nil {
@@ -36,7 +38,7 @@ func main() {
 		log.Fatalf("Failed to start syslog receiver: %v", err)
 	}
 
-	StartAlerter(cfg, db, *alertInterval)
+	StartAlerter(cm, db, *alertInterval)
 
-	log.Fatal(StartWeb(cfg.WebAddr, db))
+	log.Fatal(StartWeb(cfg.WebAddr, db, cm))
 }
