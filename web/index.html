@@ -14,13 +14,10 @@
     .icon-btn { background: none; border: none; cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
     .icon-btn svg { width: 16px; height: 16px; fill: #e0e0e0; }
     .icon-btn:hover svg { fill: #e94560; }
-    .play-pause { margin-left: 10px; border: 1px solid #a0a0a0 !important; border-radius: 4px; padding: 3px 6px !important; }
-    .play-pause:hover { border-color: #e94560 !important; }
     .gear-btn { margin-left: 8px; }
-    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .status-dot.live { background: #4caf50; }
-    .status-dot.paused { background: #ff9800; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #4caf50; }
+    .status-dot.refreshing { animation: pulse 1s ease-in-out; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     .filters { display: flex; gap: 8px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap; align-items: center; }
     .filters select, .filters input[type="datetime-local"], .filters input[name="search"] { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
     .filters select:focus, .filters input:focus { outline: none; border-color: #e94560; }
@@ -82,11 +79,7 @@
 <body>
   <header>
     <h1>
-      <span class="status-dot live" id="status-dot"></span>Logyard
-      <button class="icon-btn play-pause" id="play-pause-btn" onclick="togglePause()" title="Pause live updates">
-        <svg id="pause-icon" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
-        <svg id="play-icon" viewBox="0 0 24 24" style="display:none"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
-      </button>
+      <span class="status-dot" id="status-dot"></span>Logyard
     </h1>
     <button class="icon-btn gear-btn" onclick="openSettings()" title="Settings">
       <svg viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.04 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
@@ -181,30 +174,13 @@
              p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
     }
 
-    // Play/Pause live updates
-    let paused = false;
-
-    function togglePause() {
-      paused = !paused;
-      const form = document.getElementById('log-form');
-      const dot = document.getElementById('status-dot');
-      const playIcon = document.getElementById('play-icon');
-      const pauseIcon = document.getElementById('pause-icon');
-      if (paused) {
-        playIcon.style.display = '';
-        pauseIcon.style.display = 'none';
-        document.getElementById('play-pause-btn').title = 'Resume live updates';
-        dot.className = 'status-dot paused';
-        form.setAttribute('hx-trigger', 'submit');
-      } else {
-        playIcon.style.display = 'none';
-        pauseIcon.style.display = '';
-        document.getElementById('play-pause-btn').title = 'Pause live updates';
-        dot.className = 'status-dot live';
-        form.setAttribute('hx-trigger', 'load, submit, every 3s');
-      }
-      htmx.process(form);
-    }
+    // Pulse green dot on refresh
+    document.body.addEventListener('htmx:beforeRequest', function() {
+      var dot = document.getElementById('status-dot');
+      dot.classList.remove('refreshing');
+      void dot.offsetWidth; // force reflow to restart animation
+      dot.classList.add('refreshing');
+    });
 
     // Populate filter dropdowns from DB, filtered by current selections
     function loadFilters() {
