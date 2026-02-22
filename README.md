@@ -78,6 +78,8 @@ ignore:
   - host: proxmox
     level: warning
   - message: "CRON|systemd-.*"
+  - host: noisy-box.lan
+    discard: true
 ```
 
 ### Alert rules
@@ -86,7 +88,9 @@ Every alert rule requires `count`, `window_minutes`, and `level`. Optionally nar
 
 ### Ignore rules
 
-Each rule matches on all specified fields (AND). Multiple rules are OR'd. Ignore rules apply to alerting only -- all logs are stored and visible in the UI.
+Each rule matches on all specified fields (AND). Multiple rules are OR'd. By default, ignore rules apply to alerting only -- all logs are stored and visible in the UI.
+
+Set `discard: true` to drop matching messages entirely -- they will not be stored in the database or appear in the UI. This is useful for noisy hosts whose logs you never want to see.
 
 The `message` field supports regular expressions using Go's [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (e.g. `CRON|systemd-.*`).
 

@@ -43,7 +43,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := StartReceiver(cfg.Listen, db); err != nil {
+	if err := StartReceiver(cfg.Listen, db, cm); err != nil {
 		log.Fatalf("Failed to start syslog receiver: %v", err)
 	}
 
