@@ -64,6 +64,12 @@ alerts:
     count: 1
     window_minutes: 5
     level: crit
+  - name: "Nginx errors"
+    count: 5
+    window_minutes: 10
+    level: err
+    tag: nginx
+    message: "timeout|connection refused"
 
 ignore:
   - host: noisy-box.lan
@@ -76,7 +82,7 @@ ignore:
 
 ### Alert rules
 
-Every alert rule requires `count`, `window_minutes`, and `level`. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
+Every alert rule requires `count`, `window_minutes`, and `level`. Optionally narrow the scope with `host`, `facility`, `tag`, or `message` (regex, RE2 syntax). Empty fields are ignored. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
 
 ### Ignore rules
 

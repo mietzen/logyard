@@ -37,7 +37,7 @@ func evaluateAlerts(cfg Config, db *sql.DB) {
 			debugf("alert %q: applying %d ignore rule(s)", rule.Name, len(cfg.Ignore))
 		}
 
-		count, err := CountMatchingLogs(db, rule.Level, rule.Above, cfg.Ignore, since)
+		count, err := CountMatchingLogs(db, rule, cfg.Ignore, since)
 		if err != nil {
 			log.Printf("alert query error for %q: %v", rule.Name, err)
 			continue

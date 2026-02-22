@@ -67,6 +67,10 @@ type AlertRule struct {
 	WindowMinutes int    `yaml:"window_minutes" json:"window_minutes"`
 	Level         string `yaml:"level" json:"level"`
 	Above         bool   `yaml:"above" json:"above"`
+	Host          string `yaml:"host,omitempty" json:"host"`
+	Facility      string `yaml:"facility,omitempty" json:"facility"`
+	Tag           string `yaml:"tag,omitempty" json:"tag"`
+	Message       string `yaml:"message,omitempty" json:"message"`
 }
 
 type IgnoreRule struct {
@@ -158,6 +162,11 @@ func ValidateConfig(cfg Config) error {
 		}
 		if !validLevels[rule.Level] {
 			return fmt.Errorf("alert rule %q: invalid level %q", rule.Name, rule.Level)
+		}
+		if rule.Message != "" {
+			if _, err := regexp.Compile(rule.Message); err != nil {
+				return fmt.Errorf("alert rule %q: invalid message regex: %w", rule.Name, err)
+			}
 		}
 	}
 	for i, rule := range cfg.Ignore {

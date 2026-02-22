@@ -27,6 +27,12 @@ alerts:
     count: 1
     window_minutes: 5
     level: crit
+  - name: "Nginx errors"
+    count: 5
+    window_minutes: 10
+    level: err
+    tag: nginx
+    message: "timeout|connection refused"
 
 ignore:
   - host: noisy-box.lan

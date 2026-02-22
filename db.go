@@ -169,12 +169,12 @@ func QueryLogs(db *sql.DB, filter LogFilter, limit int) ([]LogEntry, error) {
 	return entries, rows.Err()
 }
 
-func CountMatchingLogs(db *sql.DB, severity string, above bool, ignoreRules []IgnoreRule, since time.Time) (int, error) {
+func CountMatchingLogs(db *sql.DB, rule AlertRule, ignoreRules []IgnoreRule, since time.Time) (int, error) {
 	var conditions []string
 	var args []interface{}
 
-	if above {
-		sevs := severitiesAtOrAbove(severity)
+	if rule.Above {
+		sevs := severitiesAtOrAbove(rule.Level)
 		placeholders := make([]string, len(sevs))
 		for i, s := range sevs {
 			placeholders[i] = "?"
@@ -183,10 +183,27 @@ func CountMatchingLogs(db *sql.DB, severity string, above bool, ignoreRules []Ig
 		conditions = append(conditions, "severity IN ("+strings.Join(placeholders, ",")+")")
 	} else {
 		conditions = append(conditions, "severity = ?")
-		args = append(args, severity)
+		args = append(args, rule.Level)
 	}
 	conditions = append(conditions, "timestamp > ?")
 	args = append(args, since)
+
+	if rule.Host != "" {
+		conditions = append(conditions, "host = ?")
+		args = append(args, rule.Host)
+	}
+	if rule.Facility != "" {
+		conditions = append(conditions, "facility = ?")
+		args = append(args, rule.Facility)
+	}
+	if rule.Tag != "" {
+		conditions = append(conditions, "tag = ?")
+		args = append(args, rule.Tag)
+	}
+	if rule.Message != "" {
+		conditions = append(conditions, "message REGEXP ?")
+		args = append(args, rule.Message)
+	}
 
 	// Exclude ignored logs: each rule is AND within, OR across (via multiple NOT clauses)
 	for _, rule := range ignoreRules {
