@@ -43,6 +43,8 @@ func StartReceiver(cfg ListenConfig, db *sql.DB, cm *ConfigManager) error {
 				continue
 			}
 
+			severity = applySeverityRewrite(cm, host, facility, severity, tag, message)
+
 			if err := InsertLog(db, ts, host, facility, severity, tag, message); err != nil {
 				log.Printf("insert error: %v", err)
 			}
@@ -64,6 +66,39 @@ func shouldDiscard(cm *ConfigManager, host, facility, severity, tag, message str
 		}
 	}
 	return false
+}
+
+func applySeverityRewrite(cm *ConfigManager, host, facility, severity, tag, message string) string {
+	cfg := cm.Get()
+	for _, rule := range cfg.SeverityRewrite {
+		if matchesRewriteRule(rule, host, facility, severity, tag, message) {
+			debugf("rewriting severity %s -> %s for host=%s tag=%s", severity, rule.NewSeverity, host, tag)
+			return rule.NewSeverity
+		}
+	}
+	return severity
+}
+
+func matchesRewriteRule(rule SeverityRewriteRule, host, facility, severity, tag, message string) bool {
+	if rule.Host != "" && rule.Host != host {
+		return false
+	}
+	if rule.Facility != "" && rule.Facility != facility {
+		return false
+	}
+	if rule.Level != "" && rule.Level != severity {
+		return false
+	}
+	if rule.Tag != "" && rule.Tag != tag {
+		return false
+	}
+	if rule.Message != "" {
+		matched, err := regexp.MatchString(rule.Message, message)
+		if err != nil || !matched {
+			return false
+		}
+	}
+	return true
 }
 
 func matchesIgnoreRule(rule IgnoreRule, host, facility, severity, tag, message string) bool {

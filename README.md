@@ -80,6 +80,16 @@ ignore:
   - message: "CRON|systemd-.*"
   - host: noisy-box.lan
     discard: true
+
+severity_rewrite:
+  - tag: my-docker-app
+    level: info
+    message: "ERROR|FATAL"
+    new_severity: err
+  - tag: my-docker-app
+    level: info
+    message: "WARN"
+    new_severity: warning
 ```
 
 ### Alert rules
@@ -93,6 +103,108 @@ Each rule matches on all specified fields (AND). Multiple rules are OR'd. By def
 Set `discard: true` to drop matching messages entirely -- they will not be stored in the database or appear in the UI. This is useful for noisy hosts whose logs you never want to see.
 
 The `message` field supports regular expressions using Go's [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (e.g. `CRON|systemd-.*`).
+
+### Severity rewrite rules
+
+Rewrite rules change the severity of matching messages before they are stored in the database. This is useful when log sources (like Docker's syslog driver) send all messages with the same severity regardless of actual log level.
+
+Rules are evaluated in order -- **first match wins**. Each rule matches on all specified fields (AND logic, same as ignore rules). At least one match field is required. The `new_severity` field is required and must be a valid severity level.
+
+```yaml
+severity_rewrite:
+  - tag: my-docker-app
+    level: info
+    message: "ERROR|FATAL"
+    new_severity: err
+  - tag: my-docker-app
+    level: info
+    message: "WARN"
+    new_severity: warning
+```
+
+### Docker syslog logging
+
+Docker's syslog logging driver forwards container output to a syslog server. All messages are sent as severity `info` regardless of content, which is where severity rewrite rules come in handy.
+
+```shell
+docker run -d \
+  --log-driver syslog \
+  --log-opt syslog-address=udp://logyard-host:514 \
+  --log-opt tag=my-app \
+  my-image
+```
+
+With Docker Compose:
+
+```yaml
+services:
+  my-app:
+    image: my-image
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://logyard-host:514"
+        tag: my-app
+        syslog-format: rfc3164
+```
+
+You can use `syslog-format: rfc5424` for RFC 5424 messages. Logyard auto-detects both formats.
+
+#### Global daemon configuration
+
+To apply syslog logging to all containers by default, configure Docker's `daemon.json` (typically `/etc/docker/daemon.json`):
+
+```json
+{
+  "log-driver": "syslog",
+  "log-opts": {
+    "syslog-address": "udp://logyard-host:514",
+    "syslog-facility": "docker",
+    "syslog-format": "rfc3164"
+  }
+}
+```
+
+Restart the Docker daemon after changing `daemon.json` (`sudo systemctl restart docker`). Individual containers can still override these defaults with per-container `logging:` options.
+
+When using the global log driver, you can still set a custom tag per container in Docker Compose without overriding the driver:
+
+```yaml
+services:
+  my-app:
+    image: my-image
+    logging:
+      options:
+        tag: my-app
+```
+
+Using a dedicated facility like `local0` for all Docker containers lets you write a single set of severity rewrite rules that cover every container:
+
+```yaml
+severity_rewrite:
+  - facility: docker
+    level: info
+    message: "ERROR|FATAL|PANIC"
+    new_severity: err
+  - facility: docker
+    level: info
+    message: "WARN"
+    new_severity: warning
+```
+
+Alternatively, use per-container `tag` matching if you only need rewrite rules for specific containers:
+
+```yaml
+severity_rewrite:
+  - tag: my-app
+    level: info
+    message: "ERROR|FATAL|PANIC"
+    new_severity: err
+  - tag: my-app
+    level: info
+    message: "WARN"
+    new_severity: warning
+```
 
 ## Web UI
 

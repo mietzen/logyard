@@ -70,6 +70,17 @@ ignore:
   - message: "should-be-ignored"
   - host: discardhost
     discard: true
+  - tag: rewrite-test
+
+severity_rewrite:
+  - tag: rewrite-test
+    level: info
+    message: "ERROR|FATAL"
+    new_severity: err
+  - tag: rewrite-test
+    level: info
+    message: "WARN"
+    new_severity: warning
 YAML
 
 echo "=== Starting logyard ==="
@@ -129,12 +140,40 @@ SYSLOG_TS7=$(date -u '+%b %d %H:%M:%S')
 echo "<12>${SYSLOG_TS7} discardhost noisy: this should be discarded entirely" | nc -u -w1 127.0.0.1 1514
 sleep 2
 
+# --- Severity rewrite: Docker syslog driver tests ---
+echo "=== Testing severity rewrite with Docker syslog driver (RFC 3164) ==="
+docker run --rm \
+    --log-driver syslog \
+    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt tag=rewrite-test \
+    --log-opt syslog-format=rfc3164 \
+    alpine echo "ERROR this is a critical failure from rfc3164"
+sleep 2
+
+echo "=== Testing severity rewrite with Docker syslog driver (RFC 5424) ==="
+docker run --rm \
+    --log-driver syslog \
+    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt tag=rewrite-test \
+    --log-opt syslog-format=rfc5424 \
+    alpine echo "ERROR this is a critical failure from rfc5424"
+sleep 2
+
+echo "=== Testing severity rewrite non-match (should stay info) ==="
+docker run --rm \
+    --log-driver syslog \
+    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt tag=rewrite-test \
+    --log-opt syslog-format=rfc3164 \
+    alpine echo "this is a normal info message"
+sleep 2
+
 echo "=== Checking database ==="
 docker exec logyard-test sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1; sqlite3 /data/test-logyard.db "SELECT * FROM logs;"'
 COUNT=$(docker exec logyard-test sh -c 'sqlite3 /data/test-logyard.db "SELECT count(*) FROM logs;"')
 echo "Log count: $COUNT"
-if [ "$COUNT" -lt 7 ]; then
-    echo "FAIL: Expected at least 7 logs, got $COUNT"
+if [ "$COUNT" -lt 10 ]; then
+    echo "FAIL: Expected at least 10 logs, got $COUNT"
     exit 1
 fi
 
@@ -185,6 +224,26 @@ if [ "$DISCARD_COUNT" -ne 0 ]; then
     exit 1
 fi
 echo "PASS: Discard rule prevented log from being stored"
+
+# Verify severity rewrite: ERROR messages from rewrite-test tag should be stored as "err"
+REWRITE_ERR_COUNT=$(docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT count(*) FROM logs WHERE tag='rewrite-test' AND severity='err' AND message LIKE '%ERROR%';\"")
+echo "Rewrite err count: $REWRITE_ERR_COUNT"
+if [ "$REWRITE_ERR_COUNT" -lt 2 ]; then
+    echo "FAIL: Expected at least 2 severity-rewritten err messages (rfc3164+rfc5424), got $REWRITE_ERR_COUNT"
+    docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT severity, tag, message FROM logs WHERE tag='rewrite-test';\""
+    exit 1
+fi
+echo "PASS: Severity rewrite changed info->err for ERROR messages"
+
+# Verify non-matching message kept original severity (info)
+REWRITE_INFO_COUNT=$(docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT count(*) FROM logs WHERE tag='rewrite-test' AND severity='info' AND message LIKE '%normal info%';\"")
+echo "Rewrite info count: $REWRITE_INFO_COUNT"
+if [ "$REWRITE_INFO_COUNT" -lt 1 ]; then
+    echo "FAIL: Non-matching message should keep severity info, got $REWRITE_INFO_COUNT"
+    docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT severity, tag, message FROM logs WHERE tag='rewrite-test';\""
+    exit 1
+fi
+echo "PASS: Non-matching message kept original severity (info)"
 
 echo "=== Waiting for alert evaluation ==="
 sleep 5
@@ -396,6 +455,36 @@ if [ "$BAD_REGEX" != "400" ]; then
     exit 1
 fi
 echo "PASS: Bad ignore regex rejected"
+
+# Bad severity rewrite: invalid new_severity
+BAD_REWRITE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","new_severity":"banana"}],"retention":7,"debug":false}')
+if [ "$BAD_REWRITE" != "400" ]; then
+    echo "FAIL: Bad rewrite new_severity should return 400, got $BAD_REWRITE"
+    exit 1
+fi
+echo "PASS: Bad severity rewrite new_severity rejected"
+
+# Bad severity rewrite: invalid message regex
+BAD_REWRITE_REGEX=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","message":"[invalid","new_severity":"err"}],"retention":7,"debug":false}')
+if [ "$BAD_REWRITE_REGEX" != "400" ]; then
+    echo "FAIL: Bad rewrite regex should return 400, got $BAD_REWRITE_REGEX"
+    exit 1
+fi
+echo "PASS: Bad severity rewrite regex rejected"
+
+# Bad severity rewrite: no match fields
+BAD_REWRITE_EMPTY=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"new_severity":"err"}],"retention":7,"debug":false}')
+if [ "$BAD_REWRITE_EMPTY" != "400" ]; then
+    echo "FAIL: Empty rewrite rule should return 400, got $BAD_REWRITE_EMPTY"
+    exit 1
+fi
+echo "PASS: Empty severity rewrite rule rejected"
 
 # Restore original config for clean state
 curl -s -X PUT http://127.0.0.1:8080/api/config \

@@ -43,3 +43,20 @@ ignore:
   - message: "CRON|systemd-.*"
   - host: noisy-box.lan
     discard: true
+
+severity_rewrite:
+  # Facility-based: covers all containers using that facility
+  # (set via daemon.json or --log-opt syslog-facility=local0)
+  - facility: local0
+    level: info
+    message: "ERROR|FATAL"
+    new_severity: err
+  - facility: local0
+    level: info
+    message: "WARN"
+    new_severity: warning
+  # Tag-based: target specific containers
+  # - tag: my-docker-app
+  #   level: info
+  #   message: "ERROR|FATAL"
+  #   new_severity: err

@@ -161,6 +161,10 @@
       <div id="ignore-rules-container"></div>
       <button class="add-btn" onclick="addIgnoreRule()">+ Add ignore rule</button>
 
+      <h3>Severity Rewrite Rules</h3>
+      <div id="severity-rewrite-container"></div>
+      <button class="add-btn" onclick="addSeverityRewrite()">+ Add rewrite rule</button>
+
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
         <button class="btn-save" onclick="saveSettings()">Save</button>
@@ -322,6 +326,7 @@
           document.getElementById('cfg-debug').checked = cfg.debug || false;
           renderAlertRules(cfg.alerts || []);
           renderIgnoreRules(cfg.ignore || []);
+          renderSeverityRewrites(cfg.severity_rewrite || []);
           document.getElementById('settings-modal').classList.add('open');
         });
     }
@@ -399,6 +404,34 @@
       c.appendChild(div);
     }
 
+    function renderSeverityRewrites(rules) {
+      var c = document.getElementById('severity-rewrite-container');
+      c.innerHTML = '';
+      rules.forEach(function(r, i) { addSeverityRewriteDOM(r, i); });
+    }
+
+    function addSeverityRewrite() {
+      addSeverityRewriteDOM({host:'', facility:'', tag:'', level:'', message:'', new_severity:'err'});
+    }
+
+    function addSeverityRewriteDOM(r) {
+      var c = document.getElementById('severity-rewrite-container');
+      var div = document.createElement('div');
+      div.className = 'rule-group';
+      div.innerHTML = '<button class="remove-btn" onclick="this.parentElement.remove()">&times;</button>' +
+        '<div class="field-row">' +
+        '<div><label>Host</label><input class="sr-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
+        '<div><label>Facility</label><input class="sr-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
+        '<div><label>Tag</label><input class="sr-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '<div><label>Level</label><select class="sr-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+        '<div style="flex:1"><label>Message (regex)</label><input class="sr-message" value="' + esc(r.message) + '" placeholder="e.g. ERROR|FATAL"></div>' +
+        '<div><label>New severity</label><select class="sr-new-severity">' + severityOptions(r.new_severity) + '</select></div>' +
+        '</div>';
+      c.appendChild(div);
+    }
+
     function severityOptions(selected) {
       var levels = ['emerg','alert','crit','err','warning','notice','info','debug'];
       return levels.map(function(l) { return '<option value="'+l+'"'+(l===selected?' selected':'')+'>'+l+'</option>'; }).join('');
@@ -458,6 +491,25 @@
         if (rule.host || rule.facility || rule.tag || rule.level || rule.message) ignore.push(rule);
       });
 
+      var severity_rewrite = [];
+      document.querySelectorAll('#severity-rewrite-container .rule-group').forEach(function(g, i) {
+        var rule = {
+          host: g.querySelector('.sr-host').value,
+          facility: g.querySelector('.sr-facility').value,
+          tag: g.querySelector('.sr-tag').value,
+          level: g.querySelector('.sr-level').value,
+          message: g.querySelector('.sr-message').value,
+          new_severity: g.querySelector('.sr-new-severity').value
+        };
+        if (!rule.new_severity) errors.push('Severity rewrite rule ' + (i+1) + ': new severity is required.');
+        if (!rule.host && !rule.facility && !rule.tag && !rule.level && !rule.message) errors.push('Severity rewrite rule ' + (i+1) + ': at least one match field is required.');
+        if (rule.message) {
+          try { new RegExp(rule.message); }
+          catch(e) { errors.push('Severity rewrite rule ' + (i+1) + ': invalid message regex.'); }
+        }
+        severity_rewrite.push(rule);
+      });
+
       if (errors.length > 0) { alert(errors.join('\n')); return; }
 
       var cfg = {
@@ -471,6 +523,7 @@
         },
         alerts: alerts,
         ignore: ignore,
+        severity_rewrite: severity_rewrite,
         retention: retention || 14,
         debug: document.getElementById('cfg-debug').checked
       };

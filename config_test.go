@@ -139,3 +139,65 @@ func TestValidateConfig_NoAlerts(t *testing.T) {
 		t.Fatalf("expected no error for empty alerts, got: %v", err)
 	}
 }
+
+func TestValidateConfig_SeverityRewriteValid(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		SeverityRewrite: []SeverityRewriteRule{
+			{Tag: "myapp", Level: "info", Message: "ERROR", NewSeverity: "err"},
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidateConfig_SeverityRewriteMissingNewSeverity(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{Tag: "myapp"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for missing new_severity")
+	}
+}
+
+func TestValidateConfig_SeverityRewriteInvalidNewSeverity(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{Tag: "myapp", NewSeverity: "banana"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid new_severity")
+	}
+}
+
+func TestValidateConfig_SeverityRewriteInvalidLevel(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{Tag: "myapp", Level: "banana", NewSeverity: "err"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid level")
+	}
+}
+
+func TestValidateConfig_SeverityRewriteInvalidRegex(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{Tag: "myapp", Message: "[invalid", NewSeverity: "err"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid regex")
+	}
+}
+
+func TestValidateConfig_SeverityRewriteNoMatchFields(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{NewSeverity: "err"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for empty match fields")
+	}
+}
