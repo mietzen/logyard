@@ -378,7 +378,7 @@
     }
 
     function addIgnoreRule() {
-      addIgnoreRuleDOM({host:'', facility:'', tag:'', level:'', message:''});
+      addIgnoreRuleDOM({host:'', facility:'', tag:'', level:'', message:'', discard:false});
     }
 
     function addIgnoreRuleDOM(r) {
@@ -392,7 +392,10 @@
         '<div><label>Tag</label><input class="ir-tag" value="' + esc(r.tag) + '"></div>' +
         '<div><label>Level</label><select class="ir-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
-        '<label>Message (regex)</label><input class="ir-message" value="' + esc(r.message) + '" placeholder="e.g. CRON|systemd-.*">';
+        '<div class="field-row">' +
+        '<div style="flex:1"><label>Message (regex)</label><input class="ir-message" value="' + esc(r.message) + '" placeholder="e.g. CRON|systemd-.*"></div>' +
+        '<div><label>Discard log</label><div style="padding:6px 0 4px"><input class="ir-discard" type="checkbox"' + (r.discard ? ' checked' : '') + '></div></div>' +
+        '</div>';
       c.appendChild(div);
     }
 
@@ -445,7 +448,8 @@
           facility: g.querySelector('.ir-facility').value,
           tag: g.querySelector('.ir-tag').value,
           level: g.querySelector('.ir-level').value,
-          message: g.querySelector('.ir-message').value
+          message: g.querySelector('.ir-message').value,
+          discard: g.querySelector('.ir-discard').checked
         };
         if (rule.message) {
           try { new RegExp(rule.message); }

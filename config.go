@@ -79,6 +79,7 @@ type IgnoreRule struct {
 	Tag      string `yaml:"tag" json:"tag"`
 	Level    string `yaml:"level" json:"level"`
 	Message  string `yaml:"message" json:"message"`
+	Discard  bool   `yaml:"discard" json:"discard"`
 }
 
 type ListenConfig struct {

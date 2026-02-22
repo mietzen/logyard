@@ -68,6 +68,8 @@ alerts:
 ignore:
   - tag: ignored-app
   - message: "should-be-ignored"
+  - host: discardhost
+    discard: true
 YAML
 
 echo "=== Starting logyard ==="
@@ -119,6 +121,12 @@ sleep 1
 echo "=== Sending err message not matching filtered alert (wrong host) ==="
 SYSLOG_TS6=$(date -u '+%b %d %H:%M:%S')
 echo "<11>${SYSLOG_TS6} otherhost filtapp: disk is full error" | nc -u -w1 127.0.0.1 1514
+sleep 1
+
+# --- Discard rule: message from discardhost should NOT be stored ---
+echo "=== Sending message from discardhost (should be discarded) ==="
+SYSLOG_TS7=$(date -u '+%b %d %H:%M:%S')
+echo "<12>${SYSLOG_TS7} discardhost noisy: this should be discarded entirely" | nc -u -w1 127.0.0.1 1514
 sleep 2
 
 echo "=== Checking database ==="
@@ -169,6 +177,14 @@ if [ "$REGEXHOST_COUNT" -lt 1 ]; then
     exit 1
 fi
 echo "PASS: Regex-ignored message stored (ignore only affects alerting)"
+
+# Verify discarded message is NOT in DB
+DISCARD_COUNT=$(docker exec logyard-test sh -c "sqlite3 /data/test-logyard.db \"SELECT count(*) FROM logs WHERE host='discardhost';\"")
+if [ "$DISCARD_COUNT" -ne 0 ]; then
+    echo "FAIL: Discarded message should not be in DB, got $DISCARD_COUNT entries"
+    exit 1
+fi
+echo "PASS: Discard rule prevented log from being stored"
 
 echo "=== Waiting for alert evaluation ==="
 sleep 5

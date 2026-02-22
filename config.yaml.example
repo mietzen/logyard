@@ -41,3 +41,5 @@ ignore:
   - host: proxmox
     level: warning
   - message: "CRON|systemd-.*"
+  - host: noisy-box.lan
+    discard: true

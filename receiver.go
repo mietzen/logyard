@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	"gopkg.in/mcuadros/go-syslog.v2"
 )
 
-func StartReceiver(cfg ListenConfig, db *sql.DB) error {
+func StartReceiver(cfg ListenConfig, db *sql.DB, cm *ConfigManager) error {
 	channel := make(syslog.LogPartsChannel, 1000)
 	handler := syslog.NewChannelHandler(channel)
 
@@ -37,6 +38,11 @@ func StartReceiver(cfg ListenConfig, db *sql.DB) error {
 			tag := getTag(parts)
 			message := getMessage(parts)
 
+			if shouldDiscard(cm, host, facility, severity, tag, message) {
+				debugf("discarding log from host=%s tag=%s", host, tag)
+				continue
+			}
+
 			if err := InsertLog(db, ts, host, facility, severity, tag, message); err != nil {
 				log.Printf("insert error: %v", err)
 			}
@@ -45,6 +51,41 @@ func StartReceiver(cfg ListenConfig, db *sql.DB) error {
 
 	log.Printf("Syslog receiver started on UDP %s and TCP %s", cfg.UDP, cfg.TCP)
 	return nil
+}
+
+func shouldDiscard(cm *ConfigManager, host, facility, severity, tag, message string) bool {
+	cfg := cm.Get()
+	for _, rule := range cfg.Ignore {
+		if !rule.Discard {
+			continue
+		}
+		if matchesIgnoreRule(rule, host, facility, severity, tag, message) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesIgnoreRule(rule IgnoreRule, host, facility, severity, tag, message string) bool {
+	if rule.Host != "" && rule.Host != host {
+		return false
+	}
+	if rule.Facility != "" && rule.Facility != facility {
+		return false
+	}
+	if rule.Level != "" && rule.Level != severity {
+		return false
+	}
+	if rule.Tag != "" && rule.Tag != tag {
+		return false
+	}
+	if rule.Message != "" {
+		matched, err := regexp.MatchString(rule.Message, message)
+		if err != nil || !matched {
+			return false
+		}
+	}
+	return true
 }
 
 // getTag returns the tag/app_name from LogParts, handling both RFC3164 and RFC5424.
