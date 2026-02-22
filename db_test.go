@@ -231,8 +231,10 @@ func TestCountMatchingLogs_WithIgnoreRules(t *testing.T) {
 
 	since := ts.Add(-1 * time.Minute)
 
+	rule := AlertRule{Level: "err"}
+
 	// No ignore rules: all 3 match
-	count, err := CountMatchingLogs(db, "err", false, nil, since)
+	count, err := CountMatchingLogs(db, rule, nil, since)
 	if err != nil {
 		t.Fatalf("CountMatchingLogs: %v", err)
 	}
@@ -241,19 +243,19 @@ func TestCountMatchingLogs_WithIgnoreRules(t *testing.T) {
 	}
 
 	// Ignore by tag
-	count, _ = CountMatchingLogs(db, "err", false, []IgnoreRule{{Tag: "ignored-app"}}, since)
+	count, _ = CountMatchingLogs(db, rule, []IgnoreRule{{Tag: "ignored-app"}}, since)
 	if count != 2 {
 		t.Errorf("ignore by tag: expected 2, got %d", count)
 	}
 
 	// Ignore by message regex
-	count, _ = CountMatchingLogs(db, "err", false, []IgnoreRule{{Message: "should-be-ignored"}}, since)
+	count, _ = CountMatchingLogs(db, rule, []IgnoreRule{{Message: "should-be-ignored"}}, since)
 	if count != 2 {
 		t.Errorf("ignore by regex: expected 2, got %d", count)
 	}
 
 	// Ignore by both rules
-	count, _ = CountMatchingLogs(db, "err", false, []IgnoreRule{
+	count, _ = CountMatchingLogs(db, rule, []IgnoreRule{
 		{Tag: "ignored-app"},
 		{Message: "should-be-ignored"},
 	}, since)
@@ -277,15 +279,66 @@ func TestCountMatchingLogs_Above(t *testing.T) {
 	since := ts.Add(-1 * time.Minute)
 
 	// above=false: only exact match
-	count, _ := CountMatchingLogs(db, "warning", false, nil, since)
+	count, _ := CountMatchingLogs(db, AlertRule{Level: "warning"}, nil, since)
 	if count != 1 {
 		t.Errorf("exact warning: expected 1, got %d", count)
 	}
 
 	// above=true: warning and above (emerg, alert, crit, err, warning)
-	count, _ = CountMatchingLogs(db, "warning", true, nil, since)
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "warning", Above: true}, nil, since)
 	if count != 2 {
 		t.Errorf("warning and above: expected 2, got %d", count)
+	}
+}
+
+func TestCountMatchingLogs_AlertFilters(t *testing.T) {
+	db, err := InitDB(":memory:")
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer db.Close()
+
+	ts := time.Now()
+	InsertLog(db, ts, "web1", "daemon", "err", "nginx", "disk full error")
+	InsertLog(db, ts, "web2", "daemon", "err", "nginx", "connection reset")
+	InsertLog(db, ts, "db1", "kern", "err", "postgres", "disk full error")
+
+	since := ts.Add(-1 * time.Minute)
+
+	// Filter by host
+	count, _ := CountMatchingLogs(db, AlertRule{Level: "err", Host: "web1"}, nil, since)
+	if count != 1 {
+		t.Errorf("host filter: expected 1, got %d", count)
+	}
+
+	// Filter by facility
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "err", Facility: "kern"}, nil, since)
+	if count != 1 {
+		t.Errorf("facility filter: expected 1, got %d", count)
+	}
+
+	// Filter by tag
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "err", Tag: "nginx"}, nil, since)
+	if count != 2 {
+		t.Errorf("tag filter: expected 2, got %d", count)
+	}
+
+	// Filter by message regex
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "err", Message: "disk.*full"}, nil, since)
+	if count != 2 {
+		t.Errorf("message filter: expected 2, got %d", count)
+	}
+
+	// Combined: host + message
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "err", Host: "web1", Message: "disk.*full"}, nil, since)
+	if count != 1 {
+		t.Errorf("host+message filter: expected 1, got %d", count)
+	}
+
+	// No match
+	count, _ = CountMatchingLogs(db, AlertRule{Level: "err", Host: "nonexistent"}, nil, since)
+	if count != 0 {
+		t.Errorf("no match: expected 0, got %d", count)
 	}
 }
 

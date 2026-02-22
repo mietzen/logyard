@@ -57,6 +57,13 @@ alerts:
     count: 1
     window_minutes: 5
     level: info
+  - name: "test-filtered-alert"
+    count: 1
+    window_minutes: 5
+    level: err
+    host: filterhost
+    tag: filtapp
+    message: "disk.*full"
 
 ignore:
   - tag: ignored-app
@@ -100,14 +107,26 @@ sleep 1
 echo "=== Sending info message with ignored message pattern ==="
 SYSLOG_TS4=$(date -u '+%b %d %H:%M:%S')
 echo "<14>${SYSLOG_TS4} regexhost someapp: this should-be-ignored by regex" | nc -u -w1 127.0.0.1 1514
+sleep 1
+
+# --- Filtered alert: matching message (should trigger test-filtered-alert) ---
+echo "=== Sending err message matching filtered alert ==="
+SYSLOG_TS5=$(date -u '+%b %d %H:%M:%S')
+echo "<11>${SYSLOG_TS5} filterhost filtapp: disk is full error" | nc -u -w1 127.0.0.1 1514
+sleep 1
+
+# --- Filtered alert: non-matching host (should NOT trigger test-filtered-alert) ---
+echo "=== Sending err message not matching filtered alert (wrong host) ==="
+SYSLOG_TS6=$(date -u '+%b %d %H:%M:%S')
+echo "<11>${SYSLOG_TS6} otherhost filtapp: disk is full error" | nc -u -w1 127.0.0.1 1514
 sleep 2
 
 echo "=== Checking database ==="
 docker exec logyard-test sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1; sqlite3 /data/test-logyard.db "SELECT * FROM logs;"'
 COUNT=$(docker exec logyard-test sh -c 'sqlite3 /data/test-logyard.db "SELECT count(*) FROM logs;"')
 echo "Log count: $COUNT"
-if [ "$COUNT" -lt 5 ]; then
-    echo "FAIL: Expected at least 5 logs, got $COUNT"
+if [ "$COUNT" -lt 7 ]; then
+    echo "FAIL: Expected at least 7 logs, got $COUNT"
     exit 1
 fi
 
@@ -195,6 +214,15 @@ if [ -n "$REGEX_ALERT" ]; then
     exit 1
 fi
 echo "PASS: Message regex ignore rule prevented alert"
+
+# Check that the filtered alert DID fire (matching host+tag+message)
+FILTERED_ALERT=$(echo "$MAIL_RESPONSE" | grep -o 'test-filtered-alert' || true)
+if [ -z "$FILTERED_ALERT" ]; then
+    echo "FAIL: Filtered alert (test-filtered-alert) should have fired for filterhost/filtapp/disk full"
+    echo "$MAIL_RESPONSE"
+    exit 1
+fi
+echo "PASS: Filtered alert triggered for matching host+tag+message"
 
 echo "=== Checking web UI ==="
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)

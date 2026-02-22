@@ -345,7 +345,7 @@
     }
 
     function addAlertRule() {
-      addAlertRuleDOM({name:'', count:1, window_minutes:5, level:'err', above:false});
+      addAlertRuleDOM({name:'', count:1, window_minutes:5, level:'err', above:false, host:'', facility:'', tag:'', message:''});
     }
 
     function addAlertRuleDOM(r) {
@@ -361,7 +361,13 @@
         '<div class="field-row">' +
         '<div><label>Count</label><input class="ar-count" type="number" value="' + (r.count||1) + '"></div>' +
         '<div><label>Window (min)</label><input class="ar-window" type="number" value="' + (r.window_minutes||5) + '"></div>' +
-        '</div>';
+        '</div>' +
+        '<div class="field-row">' +
+        '<div><label>Host</label><input class="ar-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
+        '<div><label>Facility</label><input class="ar-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
+        '<div><label>Tag</label><input class="ar-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '</div>' +
+        '<label>Message (regex)</label><input class="ar-message" value="' + esc(r.message) + '" placeholder="optional, e.g. disk.*full">';
       c.appendChild(div);
     }
 
@@ -411,15 +417,24 @@
         var name = g.querySelector('.ar-name').value;
         var count = parseInt(g.querySelector('.ar-count').value);
         var window = parseInt(g.querySelector('.ar-window').value);
+        var message = g.querySelector('.ar-message').value;
         if (!name) errors.push('Alert rule ' + (i+1) + ': name is required.');
         if (!count || count < 1) errors.push('Alert rule "' + (name||i+1) + '": count must be at least 1.');
         if (!window || window < 1) errors.push('Alert rule "' + (name||i+1) + '": window must be at least 1 minute.');
+        if (message) {
+          try { new RegExp(message); }
+          catch(e) { errors.push('Alert rule "' + (name||i+1) + '": invalid message regex.'); }
+        }
         alerts.push({
           name: name,
           count: count || 1,
           window_minutes: window || 5,
           level: g.querySelector('.ar-level').value,
-          above: g.querySelector('.ar-above').checked
+          above: g.querySelector('.ar-above').checked,
+          host: g.querySelector('.ar-host').value,
+          facility: g.querySelector('.ar-facility').value,
+          tag: g.querySelector('.ar-tag').value,
+          message: message
         });
       });
 
