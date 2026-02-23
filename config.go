@@ -42,10 +42,11 @@ func (cm *ConfigManager) Update(cfg Config) error {
 }
 
 type Config struct {
-	SMTP      SMTPConfig   `yaml:"smtp"`
-	Alerts    []AlertRule  `yaml:"alerts"`
-	Ignore    []IgnoreRule `yaml:"ignore"`
-	Retention int          `yaml:"retention"`
+	SMTP            SMTPConfig            `yaml:"smtp"`
+	Alerts          []AlertRule           `yaml:"alerts"`
+	Ignore          []IgnoreRule          `yaml:"ignore"`
+	SeverityRewrite []SeverityRewriteRule `yaml:"severity_rewrite"`
+	Retention       int                   `yaml:"retention"`
 	Debug     bool         `yaml:"debug"`
 	DBPath    string       `yaml:"db_path"`
 	Listen    ListenConfig `yaml:"listen"`
@@ -80,6 +81,15 @@ type IgnoreRule struct {
 	Level    string `yaml:"level" json:"level"`
 	Message  string `yaml:"message" json:"message"`
 	Discard  bool   `yaml:"discard" json:"discard"`
+}
+
+type SeverityRewriteRule struct {
+	Host        string `yaml:"host" json:"host"`
+	Facility    string `yaml:"facility" json:"facility"`
+	Tag         string `yaml:"tag" json:"tag"`
+	Level       string `yaml:"level" json:"level"`
+	Message     string `yaml:"message" json:"message"`
+	NewSeverity string `yaml:"new_severity" json:"new_severity"`
 }
 
 type ListenConfig struct {
@@ -178,6 +188,25 @@ func ValidateConfig(cfg Config) error {
 			if _, err := regexp.Compile(rule.Message); err != nil {
 				return fmt.Errorf("ignore rule %d: invalid message regex: %w", i, err)
 			}
+		}
+	}
+	for i, rule := range cfg.SeverityRewrite {
+		if rule.NewSeverity == "" {
+			return fmt.Errorf("severity rewrite rule %d: new_severity is required", i)
+		}
+		if !validLevels[rule.NewSeverity] {
+			return fmt.Errorf("severity rewrite rule %d: invalid new_severity %q", i, rule.NewSeverity)
+		}
+		if rule.Level != "" && !validLevels[rule.Level] {
+			return fmt.Errorf("severity rewrite rule %d: invalid level %q", i, rule.Level)
+		}
+		if rule.Message != "" {
+			if _, err := regexp.Compile(rule.Message); err != nil {
+				return fmt.Errorf("severity rewrite rule %d: invalid message regex: %w", i, err)
+			}
+		}
+		if rule.Host == "" && rule.Facility == "" && rule.Tag == "" && rule.Level == "" && rule.Message == "" {
+			return fmt.Errorf("severity rewrite rule %d: at least one match field is required", i)
 		}
 	}
 	return nil

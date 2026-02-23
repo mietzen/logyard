@@ -34,11 +34,12 @@ var _ embed.FS
 
 // EditableConfig is the subset of Config exposed via the settings API.
 type EditableConfig struct {
-	SMTP      SMTPConfig   `json:"smtp"`
-	Alerts    []AlertRule  `json:"alerts"`
-	Ignore    []IgnoreRule `json:"ignore"`
-	Retention int          `json:"retention"`
-	Debug     bool         `json:"debug"`
+	SMTP            SMTPConfig            `json:"smtp"`
+	Alerts          []AlertRule           `json:"alerts"`
+	Ignore          []IgnoreRule          `json:"ignore"`
+	SeverityRewrite []SeverityRewriteRule `json:"severity_rewrite"`
+	Retention       int                   `json:"retention"`
+	Debug           bool                  `json:"debug"`
 }
 
 func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
@@ -121,11 +122,12 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 		case http.MethodGet:
 			cfg := cm.Get()
 			ec := EditableConfig{
-				SMTP:      cfg.SMTP,
-				Alerts:    cfg.Alerts,
-				Ignore:    cfg.Ignore,
-				Retention: cfg.Retention,
-				Debug:     cfg.Debug,
+				SMTP:            cfg.SMTP,
+				Alerts:          cfg.Alerts,
+				Ignore:          cfg.Ignore,
+				SeverityRewrite: cfg.SeverityRewrite,
+				Retention:       cfg.Retention,
+				Debug:           cfg.Debug,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(ec)
@@ -146,6 +148,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			cfg.SMTP = ec.SMTP
 			cfg.Alerts = ec.Alerts
 			cfg.Ignore = ec.Ignore
+			cfg.SeverityRewrite = ec.SeverityRewrite
 			cfg.Retention = ec.Retention
 			cfg.Debug = ec.Debug
 
