@@ -42,6 +42,7 @@ See [config.yaml.example](config.yaml.example) for a full example.
 # retention: 14  # days
 # debug: false
 # web_addr: ":8080"
+# url: "https://logyard.example.com"  # used in alert emails
 
 listen:
   udp: ":514"
@@ -95,6 +96,8 @@ severity_rewrite:
 ### Alert rules
 
 Every alert rule requires `count`, `window_minutes`, and `level`. Optionally narrow the scope with `host`, `facility`, `tag`, or `message` (regex, RE2 syntax). Empty fields are ignored. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
+
+Alert emails are sent from "Logyard" and include an HTML table of the triggering log entries (up to 50). Set `url` in your config to include a link to your Logyard instance in the email footer. If not set, it defaults to `http://<hostname>:<web_port>`.
 
 ### Ignore rules
 

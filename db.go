@@ -242,6 +242,92 @@ func CountMatchingLogs(db *sql.DB, rule AlertRule, ignoreRules []IgnoreRule, sin
 	return count, err
 }
 
+func FetchMatchingLogs(db *sql.DB, rule AlertRule, ignoreRules []IgnoreRule, since time.Time, limit int) ([]LogEntry, error) {
+	var conditions []string
+	var args []interface{}
+
+	if rule.Above {
+		sevs := severitiesAtOrAbove(rule.Level)
+		placeholders := make([]string, len(sevs))
+		for i, s := range sevs {
+			placeholders[i] = "?"
+			args = append(args, s)
+		}
+		conditions = append(conditions, "severity IN ("+strings.Join(placeholders, ",")+")")
+	} else {
+		conditions = append(conditions, "severity = ?")
+		args = append(args, rule.Level)
+	}
+	conditions = append(conditions, "timestamp > ?")
+	args = append(args, since)
+
+	if rule.Host != "" {
+		conditions = append(conditions, "host = ?")
+		args = append(args, rule.Host)
+	}
+	if rule.Facility != "" {
+		conditions = append(conditions, "facility = ?")
+		args = append(args, rule.Facility)
+	}
+	if rule.Tag != "" {
+		conditions = append(conditions, "tag = ?")
+		args = append(args, rule.Tag)
+	}
+	if rule.Message != "" {
+		conditions = append(conditions, "message REGEXP ?")
+		args = append(args, rule.Message)
+	}
+
+	for _, ir := range ignoreRules {
+		var parts []string
+		var ruleArgs []interface{}
+		if ir.Host != "" {
+			parts = append(parts, "host = ?")
+			ruleArgs = append(ruleArgs, ir.Host)
+		}
+		if ir.Facility != "" {
+			parts = append(parts, "facility = ?")
+			ruleArgs = append(ruleArgs, ir.Facility)
+		}
+		if ir.Tag != "" {
+			parts = append(parts, "tag = ?")
+			ruleArgs = append(ruleArgs, ir.Tag)
+		}
+		if ir.Level != "" {
+			parts = append(parts, "severity = ?")
+			ruleArgs = append(ruleArgs, ir.Level)
+		}
+		if ir.Message != "" {
+			parts = append(parts, "message REGEXP ?")
+			ruleArgs = append(ruleArgs, ir.Message)
+		}
+		if len(parts) > 0 {
+			conditions = append(conditions, "NOT ("+strings.Join(parts, " AND ")+")")
+			args = append(args, ruleArgs...)
+		}
+	}
+
+	query := "SELECT id, timestamp, host, facility, severity, tag, message FROM logs WHERE " +
+		strings.Join(conditions, " AND ") + " ORDER BY id DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []LogEntry
+	for rows.Next() {
+		var e LogEntry
+		if err := rows.Scan(&e.ID, &e.Timestamp, &e.Host, &e.Facility, &e.Severity, &e.Tag, &e.Message); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 func GetLastAlerted(db *sql.DB, ruleName string) (time.Time, error) {
 	var t time.Time
 	err := db.QueryRow("SELECT last_alerted_at FROM alert_state WHERE rule_name = ?", ruleName).Scan(&t)

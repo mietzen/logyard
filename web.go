@@ -40,6 +40,7 @@ type EditableConfig struct {
 	SeverityRewrite []SeverityRewriteRule `json:"severity_rewrite"`
 	Retention       int                   `json:"retention"`
 	Debug           bool                  `json:"debug"`
+	URL             string                `json:"url"`
 }
 
 func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
@@ -128,6 +129,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 				SeverityRewrite: cfg.SeverityRewrite,
 				Retention:       cfg.Retention,
 				Debug:           cfg.Debug,
+				URL:             cfg.URL,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(ec)
@@ -151,6 +153,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			cfg.SeverityRewrite = ec.SeverityRewrite
 			cfg.Retention = ec.Retention
 			cfg.Debug = ec.Debug
+			cfg.URL = ec.URL
 
 			if err := ValidateConfig(cfg); err != nil {
 				log.Printf("config validation error: %v", err)

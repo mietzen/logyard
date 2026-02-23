@@ -32,6 +32,7 @@ listen:
   tcp: ":514"
 
 web_addr: ":8080"
+url: "http://logyard-test:8080"
 
 smtp:
   host: mailpit-test
@@ -306,6 +307,42 @@ if [ -z "$FILTERED_ALERT" ]; then
 fi
 echo "PASS: Filtered alert triggered for matching host+tag+message"
 
+# Check email sender name is "Logyard"
+LOGYARD_SENDER=$(echo "$MAIL_RESPONSE" | grep -o '"Name":"Logyard"' || true)
+if [ -z "$LOGYARD_SENDER" ]; then
+    echo "FAIL: Expected sender name 'Logyard' in email From header"
+    echo "$MAIL_RESPONSE"
+    exit 1
+fi
+echo "PASS: Email sender name is Logyard"
+
+# Fetch first email body to check HTML content
+FIRST_MSG_ID=$(echo "$MAIL_RESPONSE" | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -n "$FIRST_MSG_ID" ]; then
+    MSG_DETAIL=$(docker exec mailpit-test wget -qO- "http://localhost:8025/api/v1/message/${FIRST_MSG_ID}")
+    MSG_HTML=$(echo "$MSG_DETAIL" | grep -o '"HTML":"[^"]*"' | head -1 || true)
+
+    # Check for HTML table (JSON response uses \u003c for <)
+    if echo "$MSG_DETAIL" | grep -qE '<table|\\u003ctable'; then
+        echo "PASS: Email contains HTML table"
+    else
+        echo "FAIL: Email does not contain HTML table"
+        echo "$MSG_DETAIL"
+        exit 1
+    fi
+
+    # Check for "Check out alerts at" link
+    if echo "$MSG_DETAIL" | grep -q 'Check out alerts at'; then
+        echo "PASS: Email contains alerts link"
+    else
+        echo "FAIL: Email does not contain alerts link"
+        echo "$MSG_DETAIL"
+        exit 1
+    fi
+else
+    echo "WARN: Could not extract message ID for body verification"
+fi
+
 echo "=== Checking web UI ==="
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
 echo "Web UI status: $STATUS"
@@ -400,7 +437,7 @@ echo "=== Checking config PUT API (save and reload) ==="
 # Save new config via PUT
 PUT_RESPONSE=$(curl -s -w '\n%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"put-test-alert","count":5,"window_minutes":10,"level":"err","above":false}],"ignore":[],"retention":7,"debug":false}')
+    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"put-test-alert","count":5,"window_minutes":10,"level":"err","above":false}],"ignore":[],"retention":7,"debug":false,"url":""}')
 PUT_STATUS=$(echo "$PUT_RESPONSE" | tail -1)
 if [ "$PUT_STATUS" != "200" ]; then
     echo "FAIL: Config PUT returned $PUT_STATUS"
@@ -426,7 +463,7 @@ echo "=== Checking config validation rejects bad input ==="
 # Bad level
 BAD_LEVEL=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[{"name":"bad","count":1,"window_minutes":5,"level":"banana"}],"ignore":[],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[{"name":"bad","count":1,"window_minutes":5,"level":"banana"}],"ignore":[],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_LEVEL" != "400" ]; then
     echo "FAIL: Bad level should return 400, got $BAD_LEVEL"
     exit 1
@@ -436,7 +473,7 @@ echo "PASS: Bad alert level rejected"
 # Bad retention
 BAD_RETENTION=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[],"retention":0,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[],"retention":0,"debug":false,"url":""}')
 if [ "$BAD_RETENTION" != "400" ]; then
     echo "FAIL: Bad retention should return 400, got $BAD_RETENTION"
     exit 1
@@ -446,7 +483,7 @@ echo "PASS: Bad retention rejected"
 # Bad ignore level
 BAD_IGNORE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[{"level":"banana"}],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[{"level":"banana"}],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_IGNORE" != "400" ]; then
     echo "FAIL: Bad ignore level should return 400, got $BAD_IGNORE"
     exit 1
@@ -456,7 +493,7 @@ echo "PASS: Bad ignore level rejected"
 # Bad regex
 BAD_REGEX=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[{"message":"[invalid"}],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[{"message":"[invalid"}],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_REGEX" != "400" ]; then
     echo "FAIL: Bad regex should return 400, got $BAD_REGEX"
     exit 1
@@ -466,7 +503,7 @@ echo "PASS: Bad ignore regex rejected"
 # Bad severity rewrite: invalid new_severity
 BAD_REWRITE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","new_severity":"banana"}],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","new_severity":"banana"}],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_REWRITE" != "400" ]; then
     echo "FAIL: Bad rewrite new_severity should return 400, got $BAD_REWRITE"
     exit 1
@@ -476,7 +513,7 @@ echo "PASS: Bad severity rewrite new_severity rejected"
 # Bad severity rewrite: invalid message regex
 BAD_REWRITE_REGEX=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","message":"[invalid","new_severity":"err"}],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"tag":"test","message":"[invalid","new_severity":"err"}],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_REWRITE_REGEX" != "400" ]; then
     echo "FAIL: Bad rewrite regex should return 400, got $BAD_REWRITE_REGEX"
     exit 1
@@ -486,7 +523,7 @@ echo "PASS: Bad severity rewrite regex rejected"
 # Bad severity rewrite: no match fields
 BAD_REWRITE_EMPTY=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"new_severity":"err"}],"retention":7,"debug":false}')
+    -d '{"smtp":{},"alerts":[],"ignore":[],"severity_rewrite":[{"new_severity":"err"}],"retention":7,"debug":false,"url":""}')
 if [ "$BAD_REWRITE_EMPTY" != "400" ]; then
     echo "FAIL: Empty rewrite rule should return 400, got $BAD_REWRITE_EMPTY"
     exit 1
@@ -496,7 +533,7 @@ echo "PASS: Empty severity rewrite rule rejected"
 # Restore original config for clean state
 curl -s -X PUT http://127.0.0.1:8080/api/config \
     -H 'Content-Type: application/json' \
-    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"test-warning-alert","count":1,"window_minutes":5,"level":"warning"}],"ignore":[],"retention":1,"debug":true}' > /dev/null
+    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"test-warning-alert","count":1,"window_minutes":5,"level":"warning"}],"ignore":[],"retention":1,"debug":true,"url":""}' > /dev/null
 
 echo ""
 echo "=== All tests passed ==="
