@@ -213,6 +213,8 @@ severity_rewrite:
 
 Open `http://localhost:8080`. Auto-refreshes every 3 seconds. Filter by host, facility, severity, tag, or free-text search.
 
+Log rows that match any configured alert rule show a bell-off icon. Click it to open the settings modal with a new ignore rule prefilled from that log line's host, facility, tag, severity, and message. Review the fields, adjust the regex if needed, and click Save.
+
 Logyard does not provide authentication or TLS. Use a reverse proxy like [Caddy](https://caddyserver.com/) for HTTPS and access control.
 
 ## Docker
