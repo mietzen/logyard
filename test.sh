@@ -322,8 +322,8 @@ if [ -n "$FIRST_MSG_ID" ]; then
     MSG_DETAIL=$(docker exec mailpit-test wget -qO- "http://localhost:8025/api/v1/message/${FIRST_MSG_ID}")
     MSG_HTML=$(echo "$MSG_DETAIL" | grep -o '"HTML":"[^"]*"' | head -1 || true)
 
-    # Check for HTML table
-    if echo "$MSG_DETAIL" | grep -q '<table'; then
+    # Check for HTML table (JSON response uses \u003c for <)
+    if echo "$MSG_DETAIL" | grep -qE '<table|\\u003ctable'; then
         echo "PASS: Email contains HTML table"
     else
         echo "FAIL: Email does not contain HTML table"
