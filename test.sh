@@ -141,10 +141,17 @@ echo "<12>${SYSLOG_TS7} discardhost noisy: this should be discarded entirely" | 
 sleep 2
 
 # --- Severity rewrite: Docker syslog driver tests ---
+# On Docker Desktop (macOS/Windows) use host.docker.internal; on Linux use 127.0.0.1
+if [ "$(uname)" = "Linux" ]; then
+    SYSLOG_HOST="127.0.0.1"
+else
+    SYSLOG_HOST="host.docker.internal"
+fi
+
 echo "=== Testing severity rewrite with Docker syslog driver (RFC 3164) ==="
 docker run --rm \
     --log-driver syslog \
-    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt syslog-address=udp://${SYSLOG_HOST}:1514 \
     --log-opt tag=rewrite-test \
     --log-opt syslog-format=rfc3164 \
     alpine echo "ERROR this is a critical failure from rfc3164"
@@ -153,7 +160,7 @@ sleep 2
 echo "=== Testing severity rewrite with Docker syslog driver (RFC 5424) ==="
 docker run --rm \
     --log-driver syslog \
-    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt syslog-address=udp://${SYSLOG_HOST}:1514 \
     --log-opt tag=rewrite-test \
     --log-opt syslog-format=rfc5424 \
     alpine echo "ERROR this is a critical failure from rfc5424"
@@ -162,7 +169,7 @@ sleep 2
 echo "=== Testing severity rewrite non-match (should stay info) ==="
 docker run --rm \
     --log-driver syslog \
-    --log-opt syslog-address=udp://host.docker.internal:1514 \
+    --log-opt syslog-address=udp://${SYSLOG_HOST}:1514 \
     --log-opt tag=rewrite-test \
     --log-opt syslog-format=rfc3164 \
     alpine echo "this is a normal info message"
