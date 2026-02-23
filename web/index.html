@@ -41,6 +41,9 @@
     .sev-notice { color: #66ccff; }
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
+    .action-cell { width: 30px; text-align: center; padding: 2px 4px !important; overflow: visible; }
+    .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
+    .action-cell .icon-btn:hover svg { fill: #e94560; }
 
     /* Settings modal */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: flex-start; padding-top: 60px; }
@@ -121,6 +124,7 @@
         <th style="width:80px">Severity<span class="col-resize"></span></th>
         <th style="width:100px">Tag<span class="col-resize"></span></th>
         <th>Message</th>
+        <th style="width:30px"></th>
       </tr>
     </thead>
     <tbody id="log-body">
@@ -539,8 +543,125 @@
       .then(function(r) {
         if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
         closeSettings();
+        loadAlertRules();
       })
       .catch(function(err) { alert('Save failed: ' + err.message); });
+    }
+
+    // Alert rule matching for bell-off icons
+    var cachedAlertRules = [];
+    var severityLevels = ['emerg','alert','crit','err','warning','notice','info','debug'];
+
+    function loadAlertRules() {
+      fetch('/api/config')
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) { cachedAlertRules = cfg.alerts || []; })
+        .catch(function() {});
+    }
+    loadAlertRules();
+    setInterval(loadAlertRules, 30000);
+
+    function rowMatchesAlertRule(row, rule) {
+      var sev = row.dataset.severity;
+      var sevIdx = severityLevels.indexOf(sev);
+      var ruleIdx = severityLevels.indexOf(rule.level);
+      if (ruleIdx < 0) return false;
+      if (rule.above) {
+        if (sevIdx < 0 || sevIdx > ruleIdx) return false;
+      } else {
+        if (sev !== rule.level) return false;
+      }
+      if (rule.host && row.dataset.host.toLowerCase() !== rule.host.toLowerCase()) return false;
+      if (rule.facility && row.dataset.facility.toLowerCase() !== rule.facility.toLowerCase()) return false;
+      if (rule.tag && row.dataset.tag.toLowerCase() !== rule.tag.toLowerCase()) return false;
+      if (rule.message) {
+        try {
+          if (!new RegExp(rule.message).test(row.dataset.message)) return false;
+        } catch(e) { return false; }
+      }
+      return true;
+    }
+
+    var bellOffSVG = '<svg viewBox="0 0 24 24"><path d="M20.84,22.73L18.11,20H3V19L5,17V11C5,9.86 5.29,8.73 5.83,7.72L1.11,3L2.39,1.73L22.11,21.46L20.84,22.73M19,15.8V11C19,7.9 16.97,5.17 14,4.29C14,4.19 14,4.1 14,4A2,2 0 0,0 12,2A2,2 0 0,0 10,4C10,4.1 10,4.19 10,4.29C9.39,4.47 8.8,4.74 8.26,5.09L19,15.8M12,23A2,2 0 0,0 14,21H10A2,2 0 0,0 12,23Z"/></svg>';
+
+    function addBellOffIcons() {
+      var rows = document.querySelectorAll('#log-body tr');
+      rows.forEach(function(row) {
+        var cell = row.querySelector('.action-cell');
+        if (!cell) return;
+        cell.innerHTML = '';
+        var matched = false;
+        for (var i = 0; i < cachedAlertRules.length; i++) {
+          if (rowMatchesAlertRule(row, cachedAlertRules[i])) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) {
+          var btn = document.createElement('button');
+          btn.className = 'icon-btn';
+          btn.title = 'Create ignore rule';
+          btn.innerHTML = bellOffSVG;
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openSettingsWithIgnore({
+              host: row.dataset.host,
+              facility: row.dataset.facility,
+              tag: row.dataset.tag,
+              level: row.dataset.severity,
+              message: row.dataset.message
+            });
+          });
+          cell.appendChild(btn);
+        }
+      });
+    }
+
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+      if (e.detail.target.id === 'log-body') addBellOffIcons();
+    });
+
+    function escapeRegex(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function openSettingsWithIgnore(logLine) {
+      fetch('/api/config')
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
+          currentConfig = cfg;
+          document.getElementById('cfg-smtp-host').value = cfg.smtp.host || '';
+          document.getElementById('cfg-smtp-port').value = cfg.smtp.port || 587;
+          document.getElementById('cfg-smtp-user').value = cfg.smtp.user || '';
+          document.getElementById('cfg-smtp-password').value = cfg.smtp.password || '';
+          document.getElementById('cfg-smtp-from').value = cfg.smtp.from || '';
+          document.getElementById('cfg-smtp-to').value = cfg.smtp.to || '';
+          document.getElementById('cfg-url').value = cfg.url || '';
+          document.getElementById('cfg-retention').value = cfg.retention || 14;
+          document.getElementById('cfg-debug').checked = cfg.debug || false;
+          renderAlertRules(cfg.alerts || []);
+          renderIgnoreRules(cfg.ignore || []);
+          renderSeverityRewrites(cfg.severity_rewrite || []);
+
+          // Add prefilled ignore rule
+          addIgnoreRuleDOM({
+            host: logLine.host || '',
+            facility: logLine.facility || '',
+            tag: logLine.tag || '',
+            level: logLine.level || '',
+            message: logLine.message ? escapeRegex(logLine.message) : '',
+            discard: false
+          });
+
+          document.getElementById('settings-modal').classList.add('open');
+
+          // Scroll to the new ignore rule
+          var container = document.getElementById('ignore-rules-container');
+          var lastRule = container.lastElementChild;
+          if (lastRule) {
+            setTimeout(function() { lastRule.scrollIntoView({behavior: 'smooth', block: 'center'}); }, 100);
+          }
+        });
     }
 
     // Column resize
