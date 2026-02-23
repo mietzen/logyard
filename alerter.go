@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
+	"html"
 	"log"
 	"net"
 	"net/smtp"
@@ -61,9 +62,14 @@ func evaluateAlerts(cfg Config, db *sql.DB) {
 			continue
 		}
 
+		logs, err := FetchMatchingLogs(db, rule, cfg.Ignore, since, 50)
+		if err != nil {
+			log.Printf("alert fetch logs error for %q: %v", rule.Name, err)
+		}
+
 		debugf("alert %q: sending email to %s", rule.Name, cfg.SMTP.To)
 
-		if err := sendAlert(cfg.SMTP, rule, count); err != nil {
+		if err := sendAlert(cfg.SMTP, rule, count, logs, cfg.URL); err != nil {
 			log.Printf("failed to send alert %q: %v", rule.Name, err)
 			continue
 		}
@@ -88,23 +94,20 @@ func purgeOldLogs(retentionDays int, db *sql.DB) {
 	}
 }
 
-func sendAlert(cfg SMTPConfig, rule AlertRule, count int) error {
+func sendAlert(cfg SMTPConfig, rule AlertRule, count int, logs []LogEntry, url string) error {
 	if cfg.Host == "" {
 		return fmt.Errorf("SMTP not configured")
 	}
 
 	subject := fmt.Sprintf("[Logyard] Alert: %s", rule.Name)
-	body := fmt.Sprintf(
-		"Alert rule %q triggered.\n\n%d %s messages in the last %d minutes (threshold: %d).",
-		rule.Name, count, rule.Level, rule.WindowMinutes, rule.Count,
-	)
+	body := buildAlertBody(rule, count, logs, url)
 
 	msg := strings.Join([]string{
-		"From: " + cfg.From,
+		fmt.Sprintf("From: Logyard <%s>", cfg.From),
 		"To: " + cfg.To,
 		"Subject: " + subject,
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=utf-8",
+		"Content-Type: text/html; charset=utf-8",
 		"",
 		body,
 	}, "\r\n")
@@ -158,4 +161,41 @@ func sendAlert(cfg SMTPConfig, rule AlertRule, count int) error {
 	}
 
 	return client.Quit()
+}
+
+func buildAlertBody(rule AlertRule, count int, logs []LogEntry, url string) string {
+	var b strings.Builder
+	b.WriteString("<html><body style=\"font-family:sans-serif;font-size:14px;color:#222\">")
+	b.WriteString(fmt.Sprintf("<p>Alert rule <b>%s</b> triggered.</p>", html.EscapeString(rule.Name)))
+	b.WriteString(fmt.Sprintf("<p><b>%d</b> %s messages in the last %d minutes (threshold: %d).</p>",
+		count, html.EscapeString(rule.Level), rule.WindowMinutes, rule.Count))
+
+	if len(logs) > 0 {
+		b.WriteString("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px\">")
+		b.WriteString("<tr style=\"background:#f0f0f0\">")
+		b.WriteString("<th>Timestamp</th><th>Host</th><th>Facility</th><th>Severity</th><th>Tag</th><th>Message</th>")
+		b.WriteString("</tr>")
+		for _, e := range logs {
+			b.WriteString("<tr>")
+			b.WriteString(fmt.Sprintf("<td style=\"white-space:nowrap\">%s</td>", html.EscapeString(e.Timestamp.Format("2006-01-02 15:04:05"))))
+			b.WriteString(fmt.Sprintf("<td>%s</td>", html.EscapeString(e.Host)))
+			b.WriteString(fmt.Sprintf("<td>%s</td>", html.EscapeString(e.Facility)))
+			b.WriteString(fmt.Sprintf("<td>%s</td>", html.EscapeString(e.Severity)))
+			b.WriteString(fmt.Sprintf("<td>%s</td>", html.EscapeString(e.Tag)))
+			b.WriteString(fmt.Sprintf("<td>%s</td>", html.EscapeString(e.Message)))
+			b.WriteString("</tr>")
+		}
+		b.WriteString("</table>")
+		if count > len(logs) {
+			b.WriteString(fmt.Sprintf("<p><i>Showing %d of %d matching messages.</i></p>", len(logs), count))
+		}
+	}
+
+	if url != "" {
+		b.WriteString(fmt.Sprintf("<p>Check out alerts at: <a href=\"%s\">%s</a></p>",
+			html.EscapeString(url), html.EscapeString(url)))
+	}
+
+	b.WriteString("</body></html>")
+	return b.String()
 }

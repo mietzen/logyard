@@ -427,3 +427,61 @@ func TestDistinctValues(t *testing.T) {
 		t.Errorf("expected 2 distinct hosts, got %d: %v", len(hosts), hosts)
 	}
 }
+
+func TestFetchMatchingLogs(t *testing.T) {
+	db, err := InitDB(":memory:")
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer db.Close()
+
+	ts := time.Now()
+	InsertLog(db, ts, "web1", "daemon", "err", "nginx", "disk full error")
+	InsertLog(db, ts, "web1", "daemon", "err", "nginx", "connection reset")
+	InsertLog(db, ts, "web1", "daemon", "info", "nginx", "started")
+	InsertLog(db, ts, "db1", "kern", "err", "postgres", "disk full error")
+
+	since := ts.Add(-1 * time.Minute)
+
+	// Fetch all err entries
+	entries, err := FetchMatchingLogs(db, AlertRule{Level: "err"}, nil, since, 50)
+	if err != nil {
+		t.Fatalf("FetchMatchingLogs: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Errorf("expected 3 entries, got %d", len(entries))
+	}
+
+	// Fetch with host filter
+	entries, err = FetchMatchingLogs(db, AlertRule{Level: "err", Host: "web1"}, nil, since, 50)
+	if err != nil {
+		t.Fatalf("FetchMatchingLogs host filter: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("host filter: expected 2 entries, got %d", len(entries))
+	}
+
+	// Fetch with ignore rule
+	ignore := []IgnoreRule{{Host: "db1"}}
+	entries, err = FetchMatchingLogs(db, AlertRule{Level: "err"}, ignore, since, 50)
+	if err != nil {
+		t.Fatalf("FetchMatchingLogs with ignore: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("ignore filter: expected 2 entries, got %d", len(entries))
+	}
+
+	// Fetch with limit
+	entries, err = FetchMatchingLogs(db, AlertRule{Level: "err"}, nil, since, 1)
+	if err != nil {
+		t.Fatalf("FetchMatchingLogs limit: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("limit: expected 1 entry, got %d", len(entries))
+	}
+
+	// Verify entry fields are populated
+	if entries[0].Host == "" || entries[0].Severity == "" || entries[0].Message == "" {
+		t.Errorf("expected populated fields, got %+v", entries[0])
+	}
+}

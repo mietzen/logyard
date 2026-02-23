@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -51,6 +52,7 @@ type Config struct {
 	DBPath    string       `yaml:"db_path"`
 	Listen    ListenConfig `yaml:"listen"`
 	WebAddr   string       `yaml:"web_addr"`
+	URL       string       `yaml:"url"`
 }
 
 type SMTPConfig struct {
@@ -140,6 +142,17 @@ func LoadConfig(path string) (Config, string, error) {
 	}
 	if cfg.SMTP.Port == 0 {
 		cfg.SMTP.Port = 587
+	}
+	if cfg.URL == "" {
+		hostname, _ := os.Hostname()
+		if hostname == "" {
+			hostname = "localhost"
+		}
+		port := cfg.WebAddr
+		if strings.HasPrefix(port, ":") {
+			port = port[1:]
+		}
+		cfg.URL = fmt.Sprintf("http://%s:%s", hostname, port)
 	}
 
 	if err := ValidateConfig(cfg); err != nil {

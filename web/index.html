@@ -149,6 +149,7 @@
 
       <h3>General</h3>
       <div class="field-row">
+        <div style="flex:2"><label>URL</label><input id="cfg-url" placeholder="http://hostname:8080"></div>
         <div><label>Retention (days)</label><input id="cfg-retention" type="number"></div>
         <div><label>Debug logging</label><div style="padding:6px 0 4px"><input id="cfg-debug" type="checkbox"></div></div>
       </div>
@@ -322,6 +323,7 @@
           document.getElementById('cfg-smtp-password').value = cfg.smtp.password || '';
           document.getElementById('cfg-smtp-from').value = cfg.smtp.from || '';
           document.getElementById('cfg-smtp-to').value = cfg.smtp.to || '';
+          document.getElementById('cfg-url').value = cfg.url || '';
           document.getElementById('cfg-retention').value = cfg.retention || 14;
           document.getElementById('cfg-debug').checked = cfg.debug || false;
           renderAlertRules(cfg.alerts || []);
@@ -525,7 +527,8 @@
         ignore: ignore,
         severity_rewrite: severity_rewrite,
         retention: retention || 14,
-        debug: document.getElementById('cfg-debug').checked
+        debug: document.getElementById('cfg-debug').checked,
+        url: document.getElementById('cfg-url').value
       };
 
       fetch('/api/config', {

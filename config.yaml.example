@@ -10,6 +10,9 @@
 
 # web_addr: ":8080"
 
+# URL used in alert emails (defaults to http://<hostname>:<web_port>)
+# url: "https://logyard.example.com"
+
 smtp:
   host: smtp.example.com
   port: 587
