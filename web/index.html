@@ -154,6 +154,17 @@
         <div><label>Debug logging</label><div style="padding:6px 0 4px"><input id="cfg-debug" type="checkbox"></div></div>
       </div>
 
+      <h3>Digest (Notification Throttling)</h3>
+      <div class="field-row">
+        <div><label>Enabled</label><div style="padding:6px 0 4px"><input id="cfg-digest-enabled" type="checkbox" onchange="toggleDigestFields()"></div></div>
+        <div><label>Initial window</label><input id="cfg-digest-initial" placeholder="e.g. 5m"></div>
+        <div><label>Multiplier</label><input id="cfg-digest-multiplier" type="number" step="0.1"></div>
+      </div>
+      <div class="field-row">
+        <div><label>Max window</label><input id="cfg-digest-max" placeholder="e.g. 2h"></div>
+        <div><label>Cooldown</label><input id="cfg-digest-cooldown" placeholder="e.g. 10m"></div>
+      </div>
+
       <h3>Alert Rules</h3>
       <div id="alert-rules-container"></div>
       <button class="add-btn" onclick="addAlertRule()">+ Add alert rule</button>
@@ -326,6 +337,13 @@
           document.getElementById('cfg-url').value = cfg.url || '';
           document.getElementById('cfg-retention').value = cfg.retention || 14;
           document.getElementById('cfg-debug').checked = cfg.debug || false;
+          var digest = cfg.digest || {};
+          document.getElementById('cfg-digest-enabled').checked = digest.enabled || false;
+          document.getElementById('cfg-digest-initial').value = digest.initial || '5m';
+          document.getElementById('cfg-digest-multiplier').value = digest.multiplier || 3;
+          document.getElementById('cfg-digest-max').value = digest.max || '2h';
+          document.getElementById('cfg-digest-cooldown').value = digest.cooldown || '10m';
+          toggleDigestFields();
           renderAlertRules(cfg.alerts || []);
           renderIgnoreRules(cfg.ignore || []);
           renderSeverityRewrites(cfg.severity_rewrite || []);
@@ -344,6 +362,14 @@
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') closeSettings();
     });
+
+    function toggleDigestFields() {
+      var enabled = document.getElementById('cfg-digest-enabled').checked;
+      ['cfg-digest-initial','cfg-digest-multiplier','cfg-digest-max','cfg-digest-cooldown'].forEach(function(id) {
+        document.getElementById(id).disabled = !enabled;
+        document.getElementById(id).style.opacity = enabled ? '1' : '0.4';
+      });
+    }
 
     function renderAlertRules(rules) {
       var c = document.getElementById('alert-rules-container');
@@ -450,6 +476,19 @@
       var retention = parseInt(document.getElementById('cfg-retention').value);
       if (!retention || retention < 1) errors.push('Retention must be at least 1 day.');
 
+      var digestEnabled = document.getElementById('cfg-digest-enabled').checked;
+      var digestInitial = document.getElementById('cfg-digest-initial').value;
+      var digestMultiplier = parseFloat(document.getElementById('cfg-digest-multiplier').value);
+      var digestMax = document.getElementById('cfg-digest-max').value;
+      var digestCooldown = document.getElementById('cfg-digest-cooldown').value;
+      var durationRe = /^\s*(\d+)\s*(\w*)\s*$/;
+      if (digestEnabled) {
+        if (!durationRe.test(digestInitial)) errors.push('Digest: invalid initial window format (e.g. 5m, 10s, 2h).');
+        if (!digestMultiplier || digestMultiplier < 1.5) errors.push('Digest: multiplier must be at least 1.5.');
+        if (!durationRe.test(digestMax)) errors.push('Digest: invalid max window format.');
+        if (!durationRe.test(digestCooldown)) errors.push('Digest: invalid cooldown format.');
+      }
+
       var alerts = [];
       document.querySelectorAll('#alert-rules-container .rule-group').forEach(function(g, i) {
         var name = g.querySelector('.ar-name').value;
@@ -527,6 +566,13 @@
         ignore: ignore,
         severity_rewrite: severity_rewrite,
         retention: retention || 14,
+        digest: {
+          enabled: digestEnabled,
+          initial: digestInitial,
+          multiplier: digestMultiplier || 3,
+          max: digestMax,
+          cooldown: digestCooldown
+        },
         debug: document.getElementById('cfg-debug').checked,
         url: document.getElementById('cfg-url').value
       };
