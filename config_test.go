@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
 func validBaseConfig() Config {
@@ -199,5 +200,149 @@ func TestValidateConfig_SeverityRewriteNoMatchFields(t *testing.T) {
 	}
 	if err := ValidateConfig(cfg); err == nil {
 		t.Fatal("expected error for empty match fields")
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected time.Duration
+	}{
+		{"5s", 5 * time.Second},
+		{"10m", 10 * time.Minute},
+		{"2h", 2 * time.Hour},
+		{"300", 300 * time.Second},
+		{"5 m", 5 * time.Minute},
+		{" 10 s ", 10 * time.Second},
+		{"5M", 5 * time.Minute},
+		{"10Min", 10 * time.Minute},
+		{"2 HOURS", 2 * time.Hour},
+		{"1sec", 1 * time.Second},
+		{"30second", 30 * time.Second},
+		{"5seconds", 5 * time.Second},
+		{"1minute", 1 * time.Minute},
+		{"3minutes", 3 * time.Minute},
+		{"1hour", 1 * time.Hour},
+	}
+	for _, tt := range tests {
+		d, err := parseDuration(tt.input)
+		if err != nil {
+			t.Errorf("parseDuration(%q): unexpected error: %v", tt.input, err)
+			continue
+		}
+		if d != tt.expected {
+			t.Errorf("parseDuration(%q) = %v, want %v", tt.input, d, tt.expected)
+		}
+	}
+}
+
+func TestParseDuration_Errors(t *testing.T) {
+	badInputs := []string{
+		"",
+		"abc",
+		"5x",
+		"5 days",
+		"m5",
+		"-5s",
+	}
+	for _, input := range badInputs {
+		_, err := parseDuration(input)
+		if err == nil {
+			t.Errorf("parseDuration(%q): expected error, got nil", input)
+		}
+	}
+}
+
+func TestValidateConfig_DigestValid(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    true,
+			Initial:    "5m",
+			Multiplier: 3,
+			Max:        "2h",
+			Cooldown:   "10m",
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DigestDisabledSkipsValidation(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    false,
+			Initial:    "invalid",
+			Multiplier: 0,
+		},
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected no error when digest disabled, got: %v", err)
+	}
+}
+
+func TestValidateConfig_DigestInvalidInitial(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    true,
+			Initial:    "bad",
+			Multiplier: 2,
+			Max:        "2h",
+			Cooldown:   "10m",
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid initial")
+	}
+}
+
+func TestValidateConfig_DigestMaxLessThanInitial(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    true,
+			Initial:    "10m",
+			Multiplier: 2,
+			Max:        "5m",
+			Cooldown:   "10m",
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for max < initial")
+	}
+}
+
+func TestValidateConfig_DigestMultiplierTooLow(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    true,
+			Initial:    "5m",
+			Multiplier: 1.2,
+			Max:        "2h",
+			Cooldown:   "10m",
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for multiplier < 1.5")
+	}
+}
+
+func TestValidateConfig_DigestInvalidCooldown(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Digest: DigestConfig{
+			Enabled:    true,
+			Initial:    "5m",
+			Multiplier: 2,
+			Max:        "2h",
+			Cooldown:   "nope",
+		},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid cooldown")
 	}
 }
