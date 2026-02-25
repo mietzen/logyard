@@ -1,0 +1,60 @@
+db_path: /data/logyard.db
+retention: 7
+debug: true
+
+listen:
+  udp: ":514"
+  tcp: ":514"
+
+web_addr: ":8080"
+url: "http://localhost:8080"
+
+smtp:
+  host: mailpit
+  port: 1025
+  from: alerts@logyard.local
+  to: admin@logyard.local
+
+alerts:
+  - name: "high-error-rate"
+    count: 3
+    window_minutes: 5
+    level: err
+
+  - name: "critical-failures"
+    count: 1
+    window_minutes: 10
+    level: crit
+
+  - name: "disk-alerts"
+    count: 1
+    window_minutes: 5
+    level: err
+    message: "disk.*full|no space"
+
+  - name: "auth-failures"
+    count: 5
+    window_minutes: 10
+    level: warning
+    tag: sshd
+
+ignore:
+  - tag: healthcheck
+  - message: "routine maintenance"
+
+severity_rewrite:
+  - tag: myapp
+    level: info
+    message: "ERROR|FATAL"
+    new_severity: err
+  - tag: myapp
+    level: info
+    message: "WARN"
+    new_severity: warning
+
+digest:
+  enabled: true
+  initial: "1m"
+  multiplier: 2
+  max: "10m"
+  cooldown: "3m"

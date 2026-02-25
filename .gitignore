@@ -31,5 +31,5 @@ go.work.sum
 # .idea/
 # .vscode/
 logyard
-config.yaml
+/config.yaml
 .DS_Store

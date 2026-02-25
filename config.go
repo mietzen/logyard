@@ -4,11 +4,48 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// parseDuration parses a human-readable duration string like "5m", "10s", "2h", "300".
+// Supported units (case-insensitive): s/sec/second/seconds, m/min/minute/minutes, h/hour/hours.
+// Unitless values default to seconds.
+var durationRe = regexp.MustCompile(`^\s*(\d+)\s*(\w*)\s*$`)
+
+func parseDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration string")
+	}
+
+	matches := durationRe.FindStringSubmatch(s)
+	if matches == nil {
+		return 0, fmt.Errorf("invalid duration format: %q", s)
+	}
+
+	value, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration number: %q", matches[1])
+	}
+
+	unit := strings.TrimSpace(strings.ToLower(matches[2]))
+
+	switch unit {
+	case "", "s", "sec", "second", "seconds":
+		return time.Duration(value) * time.Second, nil
+	case "m", "min", "minute", "minutes":
+		return time.Duration(value) * time.Minute, nil
+	case "h", "hour", "hours":
+		return time.Duration(value) * time.Hour, nil
+	default:
+		return 0, fmt.Errorf("unknown duration unit: %q (use s/sec/second/seconds, m/min/minute/minutes, h/hour/hours)", unit)
+	}
+}
 
 type ConfigManager struct {
 	mu   sync.RWMutex
@@ -48,11 +85,12 @@ type Config struct {
 	Ignore          []IgnoreRule          `yaml:"ignore"`
 	SeverityRewrite []SeverityRewriteRule `yaml:"severity_rewrite"`
 	Retention       int                   `yaml:"retention"`
-	Debug     bool         `yaml:"debug"`
-	DBPath    string       `yaml:"db_path"`
-	Listen    ListenConfig `yaml:"listen"`
-	WebAddr   string       `yaml:"web_addr"`
-	URL       string       `yaml:"url"`
+	Digest    DigestConfig  `yaml:"digest"`
+	Debug     bool          `yaml:"debug"`
+	DBPath    string        `yaml:"db_path"`
+	Listen    ListenConfig  `yaml:"listen"`
+	WebAddr   string        `yaml:"web_addr"`
+	URL       string        `yaml:"url"`
 }
 
 type SMTPConfig struct {
@@ -92,6 +130,14 @@ type SeverityRewriteRule struct {
 	Level       string `yaml:"level" json:"level"`
 	Message     string `yaml:"message" json:"message"`
 	NewSeverity string `yaml:"new_severity" json:"new_severity"`
+}
+
+type DigestConfig struct {
+	Enabled    bool    `yaml:"enabled" json:"enabled"`
+	Initial    string  `yaml:"initial" json:"initial"`
+	Multiplier float64 `yaml:"multiplier" json:"multiplier"`
+	Max        string  `yaml:"max" json:"max"`
+	Cooldown   string  `yaml:"cooldown" json:"cooldown"`
 }
 
 type ListenConfig struct {
@@ -142,6 +188,20 @@ func LoadConfig(path string) (Config, string, error) {
 	}
 	if cfg.SMTP.Port == 0 {
 		cfg.SMTP.Port = 587
+	}
+	if cfg.Digest.Enabled {
+		if cfg.Digest.Initial == "" {
+			cfg.Digest.Initial = "5m"
+		}
+		if cfg.Digest.Multiplier == 0 {
+			cfg.Digest.Multiplier = 3
+		}
+		if cfg.Digest.Max == "" {
+			cfg.Digest.Max = "2h"
+		}
+		if cfg.Digest.Cooldown == "" {
+			cfg.Digest.Cooldown = "10m"
+		}
 	}
 	if cfg.URL == "" {
 		hostname, _ := os.Hostname()
@@ -220,6 +280,33 @@ func ValidateConfig(cfg Config) error {
 		}
 		if rule.Host == "" && rule.Facility == "" && rule.Tag == "" && rule.Level == "" && rule.Message == "" {
 			return fmt.Errorf("severity rewrite rule %d: at least one match field is required", i)
+		}
+	}
+	if cfg.Digest.Enabled {
+		initial, err := parseDuration(cfg.Digest.Initial)
+		if err != nil {
+			return fmt.Errorf("digest: invalid initial: %w", err)
+		}
+		if initial < time.Second {
+			return fmt.Errorf("digest: initial must be at least 1s")
+		}
+		max, err := parseDuration(cfg.Digest.Max)
+		if err != nil {
+			return fmt.Errorf("digest: invalid max: %w", err)
+		}
+		if max < initial {
+			return fmt.Errorf("digest: max must be >= initial")
+		}
+		cooldown, err := parseDuration(cfg.Digest.Cooldown)
+		if err != nil {
+			return fmt.Errorf("digest: invalid cooldown: %w", err)
+		}
+		if cooldown < time.Second {
+			return fmt.Errorf("digest: cooldown must be at least 1s")
+		}
+		_ = cooldown
+		if cfg.Digest.Multiplier < 1.5 {
+			return fmt.Errorf("digest: multiplier must be at least 1.5")
 		}
 	}
 	return nil

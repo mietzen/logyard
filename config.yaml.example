@@ -47,6 +47,15 @@ ignore:
   - host: noisy-box.lan
     discard: true
 
+# Digest mode batches multiple alerts into a single email with
+# escalating windows to reduce noise during persistent issues.
+# digest:
+#   enabled: true
+#   initial: "5m"       # first digest window
+#   multiplier: 3       # multiply window each escalation (min 1.5)
+#   max: "2h"           # maximum window cap
+#   cooldown: "10m"     # quiet period before resetting to initial
+
 severity_rewrite:
   # Facility-based: covers all containers using that facility
   # (set via daemon.json or --log-opt syslog-facility=local0)

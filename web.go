@@ -40,6 +40,7 @@ type EditableConfig struct {
 	Ignore          []IgnoreRule          `json:"ignore"`
 	SeverityRewrite []SeverityRewriteRule `json:"severity_rewrite"`
 	Retention       int                   `json:"retention"`
+	Digest          DigestConfig          `json:"digest"`
 	Debug           bool                  `json:"debug"`
 	URL             string                `json:"url"`
 }
@@ -129,6 +130,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 				Ignore:          cfg.Ignore,
 				SeverityRewrite: cfg.SeverityRewrite,
 				Retention:       cfg.Retention,
+				Digest:          cfg.Digest,
 				Debug:           cfg.Debug,
 				URL:             cfg.URL,
 			}
@@ -153,6 +155,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			cfg.Ignore = ec.Ignore
 			cfg.SeverityRewrite = ec.SeverityRewrite
 			cfg.Retention = ec.Retention
+			cfg.Digest = ec.Digest
 			cfg.Debug = ec.Debug
 			cfg.URL = ec.URL
 

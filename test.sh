@@ -554,4 +554,102 @@ curl -s -X PUT http://127.0.0.1:8080/api/config \
     -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"test-warning-alert","count":1,"window_minutes":5,"level":"warning"}],"ignore":[],"retention":1,"debug":true,"url":""}' > /dev/null
 
 echo ""
+echo "=== Digest mode integration tests ==="
+
+# Clear mailpit inbox (use curl from logyard container since wget doesn't support DELETE method)
+docker exec logyard-test curl -s -X DELETE http://mailpit-test:8025/api/v1/messages > /dev/null
+
+# Enable digest mode with short timings for testing
+# Use host filters to avoid matching earlier test messages in the DB
+echo "=== Enabling digest mode ==="
+DIGEST_PUT=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"digest-alert-1","count":1,"window_minutes":5,"level":"warning","host":"digesthost1"},{"name":"digest-alert-2","count":1,"window_minutes":5,"level":"err","host":"digesthost2"}],"ignore":[],"retention":1,"debug":true,"url":"http://logyard-test:8080","digest":{"enabled":true,"initial":"10s","multiplier":2,"max":"60s","cooldown":"30s"}}')
+if [ "$DIGEST_PUT" != "200" ]; then
+    echo "FAIL: Digest config PUT returned $DIGEST_PUT"
+    exit 1
+fi
+echo "PASS: Digest config accepted"
+
+# Validate digest config is returned via GET
+DIGEST_GET=$(curl -s http://127.0.0.1:8080/api/config)
+if ! echo "$DIGEST_GET" | grep -q '"enabled":true'; then
+    echo "FAIL: Digest config not returned in GET"
+    echo "$DIGEST_GET"
+    exit 1
+fi
+echo "PASS: Digest config returned in GET API"
+
+# Validate bad digest config is rejected
+BAD_DIGEST=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[],"ignore":[],"retention":1,"debug":true,"url":"","digest":{"enabled":true,"initial":"bad","multiplier":1,"max":"2h","cooldown":"10m"}}')
+if [ "$BAD_DIGEST" != "400" ]; then
+    echo "FAIL: Bad digest config should return 400, got $BAD_DIGEST"
+    exit 1
+fi
+echo "PASS: Bad digest config rejected"
+
+# Re-apply valid digest config (the bad PUT should not have changed it)
+curl -s -X PUT http://127.0.0.1:8080/api/config \
+    -H 'Content-Type: application/json' \
+    -d '{"smtp":{"host":"mailpit-test","port":1025,"from":"alerts@test.local","to":"admin@test.local"},"alerts":[{"name":"digest-alert-1","count":1,"window_minutes":5,"level":"warning","host":"digesthost1"},{"name":"digest-alert-2","count":1,"window_minutes":5,"level":"err","host":"digesthost2"}],"ignore":[],"retention":1,"debug":true,"url":"http://logyard-test:8080","digest":{"enabled":true,"initial":"10s","multiplier":2,"max":"60s","cooldown":"30s"}}' > /dev/null
+
+# Wait for flush loop to pick up digest-enabled state (polls every 5s when disabled)
+echo "=== Waiting for digest mode to activate ==="
+sleep 7
+
+# Clear mailpit inbox before sending test messages
+docker exec logyard-test curl -s -X DELETE http://mailpit-test:8025/api/v1/messages > /dev/null
+
+# Send alert-triggering syslog messages for both rules
+echo "=== Sending digest test messages ==="
+SYSLOG_TS_D1=$(date -u '+%b %d %H:%M:%S')
+echo "<12>${SYSLOG_TS_D1} digesthost1 digestapp1: warning message for digest test" | nc -u -w1 127.0.0.1 1514
+SYSLOG_TS_D2=$(date -u '+%b %d %H:%M:%S')
+echo "<11>${SYSLOG_TS_D2} digesthost2 digestapp2: err message for digest test" | nc -u -w1 127.0.0.1 1514
+sleep 1
+
+# Wait for first digest window (10s) + alert interval (3s) + buffer
+echo "=== Waiting for first digest window (10s + buffer) ==="
+sleep 15
+
+# Verify: exactly 1 digest email (batched, not 2 individual emails)
+DIGEST_LIST=$(docker exec logyard-test curl -s http://mailpit-test:8025/api/v1/messages)
+DIGEST_MSG_COUNT=$(echo "$DIGEST_LIST" | grep -o '"messages_count":[0-9]*' | cut -d: -f2)
+echo "Digest email count: $DIGEST_MSG_COUNT"
+if [ "$DIGEST_MSG_COUNT" -ne 1 ]; then
+    echo "FAIL: Expected exactly 1 digest email, got $DIGEST_MSG_COUNT"
+    echo "$DIGEST_LIST"
+    exit 1
+fi
+echo "PASS: Exactly 1 digest email received"
+
+# Verify digest email contains "Digest" in subject
+if ! echo "$DIGEST_LIST" | grep -q 'Alert Digest'; then
+    echo "FAIL: Digest email subject should contain 'Alert Digest'"
+    echo "$DIGEST_LIST"
+    exit 1
+fi
+echo "PASS: Digest email has correct subject"
+
+# Fetch full email body to verify both rule names (listing API truncates snippet)
+DIGEST_MSG_ID=$(echo "$DIGEST_LIST" | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4)
+DIGEST_BODY=$(docker exec logyard-test curl -s "http://mailpit-test:8025/api/v1/message/${DIGEST_MSG_ID}")
+
+if ! echo "$DIGEST_BODY" | grep -q 'digest-alert-1'; then
+    echo "FAIL: Digest email should contain digest-alert-1"
+    echo "$DIGEST_BODY"
+    exit 1
+fi
+if ! echo "$DIGEST_BODY" | grep -q 'digest-alert-2'; then
+    echo "FAIL: Digest email should contain digest-alert-2"
+    echo "$DIGEST_BODY"
+    exit 1
+fi
+echo "PASS: Digest email contains both alert rules"
+
+echo "=== Digest mode tests passed ==="
+
+echo ""
 echo "=== All tests passed ==="
