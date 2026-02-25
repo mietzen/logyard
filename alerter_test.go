@@ -234,3 +234,206 @@ func TestSendAlert_EmailFormat(t *testing.T) {
 		t.Fatal("timeout waiting for email")
 	}
 }
+
+func TestBuildDigestBody(t *testing.T) {
+	items := []DigestItem{
+		{
+			Rule:  AlertRule{Name: "rule-one", Level: "err", Count: 5, WindowMinutes: 10},
+			Count: 7,
+			Logs: []LogEntry{
+				{ID: 1, Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC), Host: "web1", Facility: "daemon", Severity: "err", Tag: "nginx", Message: "disk full"},
+			},
+		},
+		{
+			Rule:  AlertRule{Name: "rule-two", Level: "warning", Count: 3, WindowMinutes: 5},
+			Count: 3,
+			Logs: []LogEntry{
+				{ID: 2, Timestamp: time.Date(2025, 1, 15, 10, 31, 0, 0, time.UTC), Host: "web2", Facility: "kern", Severity: "warning", Tag: "app", Message: "high load"},
+			},
+		},
+	}
+
+	body := buildDigestBody(items, "http://logyard:8080", 5*time.Minute, 15*time.Minute)
+
+	if !strings.Contains(body, "<h2>Logyard Alert Digest</h2>") {
+		t.Error("expected digest header")
+	}
+	if !strings.Contains(body, "2 alert rule(s) triggered") {
+		t.Error("expected rule count summary")
+	}
+	if !strings.Contains(body, "5m0s") {
+		t.Error("expected current window in body")
+	}
+	if !strings.Contains(body, "15m0s") {
+		t.Error("expected next window in body")
+	}
+	if !strings.Contains(body, "<h3>rule-one</h3>") {
+		t.Error("expected rule-one heading")
+	}
+	if !strings.Contains(body, "<h3>rule-two</h3>") {
+		t.Error("expected rule-two heading")
+	}
+	if !strings.Contains(body, "disk full") {
+		t.Error("expected rule-one log entry")
+	}
+	if !strings.Contains(body, "high load") {
+		t.Error("expected rule-two log entry")
+	}
+	if !strings.Contains(body, "Showing 1 of 7") {
+		t.Error("expected 'Showing 1 of 7' note for rule-one")
+	}
+	if !strings.Contains(body, "http://logyard:8080") {
+		t.Error("expected URL in body")
+	}
+}
+
+func TestBuildDigestBody_HTMLEscape(t *testing.T) {
+	items := []DigestItem{
+		{
+			Rule:  AlertRule{Name: "xss<test>", Level: "err", Count: 1, WindowMinutes: 5},
+			Count: 1,
+			Logs: []LogEntry{
+				{ID: 1, Timestamp: time.Now(), Host: "h", Facility: "f", Severity: "err", Tag: "t", Message: "<script>alert('xss')</script>"},
+			},
+		},
+	}
+
+	body := buildDigestBody(items, "", 5*time.Minute, 15*time.Minute)
+
+	if strings.Contains(body, "<script>") {
+		t.Error("expected HTML-escaped message content")
+	}
+	if strings.Contains(body, "xss<test>") {
+		t.Error("expected HTML-escaped rule name")
+	}
+}
+
+func TestDeduplicateItems(t *testing.T) {
+	items := []DigestItem{
+		{Rule: AlertRule{Name: "rule-a"}, Count: 5},
+		{Rule: AlertRule{Name: "rule-b"}, Count: 3},
+		{Rule: AlertRule{Name: "rule-a"}, Count: 10},
+		{Rule: AlertRule{Name: "rule-b"}, Count: 1},
+	}
+
+	result := deduplicateItems(items)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(result))
+	}
+	for _, item := range result {
+		switch item.Rule.Name {
+		case "rule-a":
+			if item.Count != 10 {
+				t.Errorf("rule-a: expected count 10, got %d", item.Count)
+			}
+		case "rule-b":
+			if item.Count != 3 {
+				t.Errorf("rule-b: expected count 3, got %d", item.Count)
+			}
+		default:
+			t.Errorf("unexpected rule: %s", item.Rule.Name)
+		}
+	}
+}
+
+func TestDigestState_EscalationAndReset(t *testing.T) {
+	ds := &DigestState{currentWindow: 10 * time.Second}
+	cfg := DigestConfig{
+		Enabled:    true,
+		Initial:    "10s",
+		Multiplier: 2,
+		Max:        "60s",
+		Cooldown:   "30s",
+	}
+
+	// First escalation: 10s * 2 = 20s
+	ds.currentWindow = ds.nextWindow(cfg)
+	if ds.currentWindow != 20*time.Second {
+		t.Errorf("expected 20s, got %s", ds.currentWindow)
+	}
+
+	// Second escalation: 20s * 2 = 40s
+	ds.currentWindow = ds.nextWindow(cfg)
+	if ds.currentWindow != 40*time.Second {
+		t.Errorf("expected 40s, got %s", ds.currentWindow)
+	}
+
+	// Third escalation: 40s * 2 = 80s, capped at 60s
+	ds.currentWindow = ds.nextWindow(cfg)
+	if ds.currentWindow != 60*time.Second {
+		t.Errorf("expected 60s (capped), got %s", ds.currentWindow)
+	}
+
+	// Further escalation stays at cap
+	ds.currentWindow = ds.nextWindow(cfg)
+	if ds.currentWindow != 60*time.Second {
+		t.Errorf("expected 60s (still capped), got %s", ds.currentWindow)
+	}
+}
+
+func TestDigestState_Add(t *testing.T) {
+	ds := &DigestState{currentWindow: 10 * time.Second}
+
+	ds.Add(DigestItem{Rule: AlertRule{Name: "r1"}, Count: 1})
+	ds.Add(DigestItem{Rule: AlertRule{Name: "r2"}, Count: 2})
+
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	if len(ds.pending) != 2 {
+		t.Fatalf("expected 2 pending items, got %d", len(ds.pending))
+	}
+	if ds.lastActivityAt.IsZero() {
+		t.Error("expected lastActivityAt to be set")
+	}
+}
+
+func TestSendDigest_EmailFormat(t *testing.T) {
+	addr, msgCh := mockSMTPServer(t)
+	parts := strings.SplitN(addr, ":", 2)
+	host := parts[0]
+	port := 0
+	for _, c := range parts[1] {
+		port = port*10 + int(c-'0')
+	}
+
+	cfg := SMTPConfig{
+		Host: host,
+		Port: port,
+		From: "alerts@test.local",
+		To:   "admin@test.local",
+	}
+	items := []DigestItem{
+		{
+			Rule:  AlertRule{Name: "test-digest-rule", Level: "err", Count: 1, WindowMinutes: 5},
+			Count: 3,
+			Logs: []LogEntry{
+				{ID: 1, Timestamp: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC), Host: "srv1", Facility: "daemon", Severity: "err", Tag: "myapp", Message: "something broke"},
+			},
+		},
+	}
+
+	err := sendDigest(cfg, items, "http://logyard.example.com", 5*time.Minute, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("sendDigest: %v", err)
+	}
+
+	select {
+	case msg := <-msgCh:
+		if !strings.Contains(msg, "Alert Digest: 1 rule(s) triggered") {
+			t.Error("expected digest subject")
+		}
+		if !strings.Contains(msg, "test-digest-rule") {
+			t.Error("expected rule name in body")
+		}
+		if !strings.Contains(msg, "something broke") {
+			t.Error("expected log message in body")
+		}
+		if !strings.Contains(msg, "http://logyard.example.com") {
+			t.Error("expected URL in body")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for digest email")
+	}
+}
