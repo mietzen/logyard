@@ -82,6 +82,13 @@ ignore:
   - host: noisy-box.lan
     discard: true
 
+digest:
+  enabled: true
+  initial: "5m"
+  multiplier: 3
+  max: "2h"
+  cooldown: "10m"
+
 severity_rewrite:
   - tag: my-docker-app
     level: info
@@ -98,6 +105,27 @@ severity_rewrite:
 Every alert rule requires `count`, `window_minutes`, and `level`. Optionally narrow the scope with `host`, `facility`, `tag`, or `message` (regex, RE2 syntax). Empty fields are ignored. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
 
 Alert emails are sent from "Logyard" and include an HTML table of the triggering log entries (up to 50). Set `url` in your config to include a link to your Logyard instance in the email footer. If not set, it defaults to `http://<hostname>:<web_port>`.
+
+### Digest mode
+
+When multiple alert rules fire continuously (e.g. overnight), individual emails can pile up quickly. Digest mode batches all triggered alerts into a single email and escalates the collection window using a multiplier, reducing noise while preserving all alert information.
+
+```yaml
+digest:
+  enabled: true
+  initial: "5m"       # first digest window
+  multiplier: 3       # multiply window each escalation (min 1.5)
+  max: "2h"           # maximum window cap
+  cooldown: "10m"     # quiet period before resetting to initial
+```
+
+**Escalation example** (multiplier=3): 5m &rarr; 15m &rarr; 45m &rarr; 2h (capped). If no alerts fire for the `cooldown` duration after the last digest, the window resets to `initial`.
+
+Duration values support human-readable units: `s`/`sec`/`seconds`, `m`/`min`/`minutes`, `h`/`hour`/`hours`. Unitless values default to seconds.
+
+Per-rule cooldowns still apply during digest mode -- each rule only fires once per its `window_minutes`.
+
+When digest is not configured (or `enabled: false`), behavior is identical to the default per-rule alerting.
 
 ### Ignore rules
 
@@ -215,6 +243,13 @@ Open `http://localhost:8080`. Auto-refreshes every 3 seconds. Filter by host, fa
 
 Logyard does not provide authentication or TLS. Use a reverse proxy like [Caddy](https://caddyserver.com/) for HTTPS and access control.
 
+## Timestamps
+
+Logyard auto-detects both RFC 3164 and RFC 5424 syslog formats. Timestamps are displayed as received -- Logyard does not convert between timezones.
+
+- **RFC 3164** (`<PRI>Jun  1 14:30:00 ...`): No year, no timezone. The parser fills in the current year and stores the time value as-is. The displayed time matches whatever clock the sender used. Docker's syslog driver defaults to this format.
+- **RFC 5424** (`<PRI>1 2025-06-01T14:30:00+02:00 ...`): Full ISO 8601 date with timezone offset. The timestamp is displayed in the sender's timezone (e.g. a message sent with `+02:00` is displayed at that offset, a message sent with `Z` is displayed as UTC).
+
 ## Docker
 
 ```shell
@@ -260,3 +295,24 @@ sudo systemctl enable --now logyard
 ```
 
 Port 514 requires `CAP_NET_BIND_SERVICE` (included in the service file). During development, use ports above 1024.
+
+## Local Development
+
+A docker-compose setup is included for testing the web UI, alert rules, ignore rules, and digest batching locally. It starts logyard, a [mailpit](https://mailpit.axllent.org/) SMTP mock with web UI, and a syslog message generator that sends a continuous stream of realistic messages.
+
+```shell
+docker compose -f docker-compose.dev.yaml up --build
+```
+
+| Service   | URL                    | Description                           |
+|-----------|------------------------|---------------------------------------|
+| Logyard   | <http://localhost:8080> | Web UI and log console                |
+| Mailpit   | <http://localhost:8025> | Email inbox UI (captures alert mails) |
+
+The generator sends a weighted mix of severities (mostly info, some warnings, occasional errors, rare crits) from multiple hosts and tags. Edit `dev/config.yaml` to test different alert rules, ignore rules, severity rewrites, or digest settings. Changes to the config can be applied live via the settings modal in the Logyard web UI.
+
+Stop the stack with:
+
+```shell
+docker compose -f docker-compose.dev.yaml down -v
+```
