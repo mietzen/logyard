@@ -364,6 +364,24 @@ if ! echo "$BODY" | grep -q "rfc5424host"; then
 fi
 echo "PASS: Web UI and API working"
 
+# Verify data attributes on log rows for bell-off ignore feature
+if ! echo "$BODY" | grep -q 'data-host="rfc3164host"'; then
+    echo "FAIL: Log rows missing data-host attribute"
+    echo "$BODY"
+    exit 1
+fi
+if ! echo "$BODY" | grep -q 'data-severity='; then
+    echo "FAIL: Log rows missing data-severity attribute"
+    echo "$BODY"
+    exit 1
+fi
+if ! echo "$BODY" | grep -q 'action-cell'; then
+    echo "FAIL: Log rows missing action-cell column"
+    echo "$BODY"
+    exit 1
+fi
+echo "PASS: Log rows contain data attributes and action cell"
+
 echo "=== Checking healthz ==="
 HEALTH=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/healthz)
 if [ "$HEALTH" != "200" ]; then

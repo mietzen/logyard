@@ -18,13 +18,14 @@ var htmxJS []byte
 
 var rowsTemplate = template.Must(template.New("rows").Parse(`
 {{- range . -}}
-<tr class="sev-{{.Severity}}">
+<tr class="sev-{{.Severity}}" data-host="{{.Host}}" data-facility="{{.Facility}}" data-severity="{{.Severity}}" data-tag="{{.Tag}}" data-message="{{.Message}}">
   <td>{{.Timestamp.Format "2006-01-02 15:04:05"}}</td>
   <td>{{.Host}}</td>
   <td>{{.Facility}}</td>
   <td>{{.Severity}}</td>
   <td>{{.Tag}}</td>
   <td>{{.Message}}</td>
+  <td class="action-cell"></td>
 </tr>
 {{- end -}}
 `))
