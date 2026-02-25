@@ -1,0 +1,35 @@
+services:
+  logyard:
+    build: .
+    container_name: logyard-dev
+    ports:
+      - "1514:514/udp"
+      - "1515:514/tcp"
+      - "8080:8080"
+    volumes:
+      - ./dev/config.yaml:/data/config.yaml
+      - logyard-data:/data
+    command: ["-config", "/data/config.yaml", "-alert-interval", "10s"]
+    depends_on:
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit-dev
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP (for direct access if needed)
+
+  # Generates a continuous stream of syslog messages for local testing
+  syslog-generator:
+    image: debian:trixie-slim
+    container_name: syslog-generator-dev
+    depends_on:
+      - logyard
+    entrypoint: ["/bin/bash", "/scripts/generate.sh"]
+    volumes:
+      - ./dev/generate.sh:/scripts/generate.sh:ro
+      - /etc/localtime:/etc/localtime:ro
+
+volumes:
+  logyard-data:
