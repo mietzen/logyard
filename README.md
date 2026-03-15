@@ -320,3 +320,7 @@ Stop the stack with:
 ```shell
 docker compose -f docker-compose.dev.yaml down -v
 ```
+
+## Credits
+
+Icons by [Pictogrammers](https://pictogrammers.com/) (Material Design Icons), licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

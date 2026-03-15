@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 //go:embed web/index.html
@@ -49,13 +50,15 @@ type EditableConfig struct {
 func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 	mux := http.NewServeMux()
 
+	pageHTML := strings.Replace(indexHTML, "{{VERSION}}", version, 1)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(indexHTML))
+		w.Write([]byte(pageHTML))
 	})
 
 	mux.HandleFunc("/static/htmx.min.js", func(w http.ResponseWriter, r *http.Request) {
