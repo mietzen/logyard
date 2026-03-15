@@ -43,7 +43,9 @@
     .sev-debug { color: #888888; }
     .msg-cell { cursor: pointer; }
     .msg-cell.expanded { white-space: normal; word-break: break-word; }
-    .action-cell { width: 30px; text-align: center; padding: 2px 4px !important; overflow: visible; }
+    .action-cell { width: 55px; text-align: center; padding: 2px 4px !important; overflow: visible; white-space: nowrap; }
+    .copy-btn svg { width: 14px; height: 14px; fill: #a0a0a0; vertical-align: middle; }
+    .copy-btn:hover svg { fill: #66ccff; }
     .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
     .action-cell .icon-btn:hover svg { fill: #e94560; }
 
@@ -661,7 +663,8 @@
       rows.forEach(function(row) {
         var cell = row.querySelector('.action-cell');
         if (!cell) return;
-        cell.innerHTML = '';
+        var existingBell = cell.querySelector('.bell-btn');
+        if (existingBell) existingBell.remove();
         var matched = false;
         for (var i = 0; i < cachedAlertRules.length; i++) {
           if (rowMatchesAlertRule(row, cachedAlertRules[i])) {
@@ -671,7 +674,7 @@
         }
         if (matched) {
           var btn = document.createElement('button');
-          btn.className = 'icon-btn';
+          btn.className = 'icon-btn bell-btn';
           btn.title = 'Create ignore rule';
           btn.innerHTML = bellOffSVG;
           btn.addEventListener('click', function(e) {
@@ -694,6 +697,17 @@
     });
 
     document.getElementById('log-body').addEventListener('click', function(e) {
+      var btn = e.target.closest('.copy-btn');
+      if (btn) {
+        e.stopPropagation();
+        var row = btn.closest('tr');
+        var msg = row.dataset.message;
+        navigator.clipboard.writeText(msg).then(function() {
+          btn.querySelector('svg').style.fill = '#4caf50';
+          setTimeout(function() { btn.querySelector('svg').style.fill = ''; }, 1000);
+        });
+        return;
+      }
       var td = e.target.closest('td.msg-cell');
       if (td) td.classList.toggle('expanded');
     });
