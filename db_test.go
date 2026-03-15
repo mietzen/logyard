@@ -181,6 +181,31 @@ func TestInitDB_AndInsertQuery(t *testing.T) {
 	}
 }
 
+func TestQueryLogs_Limit(t *testing.T) {
+	db, err := InitDB(":memory:")
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	defer db.Close()
+
+	ts := time.Now()
+	for i := 0; i < 5; i++ {
+		InsertLog(db, ts.Add(time.Duration(i)*time.Second), "h", "kern", "info", "app", "msg")
+	}
+
+	// Positive limit restricts rows
+	entries, _ := QueryLogs(db, LogFilter{}, 3)
+	if len(entries) != 3 {
+		t.Errorf("limit=3: expected 3 entries, got %d", len(entries))
+	}
+
+	// Zero limit returns all rows (unlimited)
+	entries, _ = QueryLogs(db, LogFilter{}, 0)
+	if len(entries) != 5 {
+		t.Errorf("limit=0: expected 5 entries, got %d", len(entries))
+	}
+}
+
 func TestQueryLogs_Filters(t *testing.T) {
 	db, err := InitDB(":memory:")
 	if err != nil {

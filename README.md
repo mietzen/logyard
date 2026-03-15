@@ -102,7 +102,7 @@ severity_rewrite:
 
 ### Alert rules
 
-Every alert rule requires `count`, `window_minutes`, and `level`. Optionally narrow the scope with `host`, `facility`, `tag`, or `message` (regex, RE2 syntax). Empty fields are ignored. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
+Every alert rule requires `count`, `window_minutes`, and `level`. Optionally narrow the scope with `host`, `facility`, `tag` (regex), or `message` (regex, RE2 syntax). Empty fields are ignored. The alerter checks every 60s (configurable via `-alert-interval`) and sends an email when the threshold is reached. Cooldown prevents re-alerting within the same time window.
 
 Alert emails are sent from "Logyard" and include an HTML table of the triggering log entries (up to 50). Set `url` in your config to include a link to your Logyard instance in the email footer. If not set, it defaults to `http://<hostname>:<web_port>`.
 
@@ -133,7 +133,7 @@ Each rule matches on all specified fields (AND). Multiple rules are OR'd. By def
 
 Set `discard: true` to drop matching messages entirely -- they will not be stored in the database or appear in the UI. This is useful for noisy hosts whose logs you never want to see.
 
-The `message` field supports regular expressions using Go's [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (e.g. `CRON|systemd-.*`).
+The `tag` and `message` fields support regular expressions using Go's [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (e.g. `CRON|systemd-.*`). Use `^exactmatch$` for exact tag matching.
 
 ### Severity rewrite rules
 
@@ -239,7 +239,9 @@ severity_rewrite:
 
 ## Web UI
 
-Open `http://localhost:8080`. Auto-refreshes every 3 seconds. Filter by host, facility, severity, tag, or free-text search.
+Open `http://localhost:8080`. Auto-refreshes every 3 seconds. Filter by host, facility, severity, tag, or free-text search. The row limit dropdown controls how many rows are displayed (default 200); selecting a custom date range automatically shows unlimited rows.
+
+Each row has a copy button that copies all fields (timestamp, host, facility, severity, tag, message) to the clipboard. Use the pause button in the filter bar to stop auto-refresh and select text across multiple rows.
 
 Log rows that match any configured alert rule show a bell-off icon. Click it to open the settings modal with a new ignore rule prefilled from that log line's host, facility, tag, severity, and message. Review the fields, adjust the regex if needed, and click Save.
 

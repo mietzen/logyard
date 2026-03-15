@@ -25,6 +25,11 @@
     .filters .btn-filter:hover { background: #1a4a7a; }
     .filters .btn-reset { background: #333; color: #e0e0e0; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
     .filters .btn-reset:hover { background: #444; }
+    .btn-pause { background: #333; border: none; padding: 6px 8px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; }
+    .btn-pause svg { fill: #e0e0e0; }
+    .btn-pause:hover svg { fill: #66ccff; }
+    .btn-pause.paused { background: #4a2800; }
+    .btn-pause.paused svg { fill: #ffcc00; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { position: sticky; top: 0; background: #16213e; z-index: 1; }
     th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; border-right: 1px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; }
@@ -42,11 +47,11 @@
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
     .msg-cell { white-space: normal; word-break: break-word; }
-    .action-cell { width: 55px; text-align: center; padding: 2px 4px !important; overflow: visible; white-space: nowrap; display: flex; gap: 2px; justify-content: center; align-items: center; }
-    .copy-btn svg { width: 14px; height: 14px; fill: #a0a0a0; vertical-align: middle; }
-    .copy-btn:hover svg { fill: #66ccff; }
+    .action-cell { white-space: nowrap; text-align: center; padding: 2px 4px !important; overflow: visible; }
+    .action-cell .icon-btn { vertical-align: middle; margin: 0 1px; }
     .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
     .action-cell .icon-btn:hover svg { fill: #e94560; }
+    .copy-btn:hover svg { fill: #66ccff !important; }
 
     /* Settings modal */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: flex-start; padding-top: 60px; }
@@ -124,6 +129,10 @@
     </select>
     <button type="submit" class="btn-filter">Filter</button>
     <button type="button" class="btn-reset" onclick="resetFilters()">Reset</button>
+    <button type="button" class="btn-pause" id="pause-btn" onclick="togglePause()" title="Pause auto-refresh">
+      <svg id="pause-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+      <svg id="play-icon" viewBox="0 0 24 24" width="14" height="14" style="display:none"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+    </button>
   </form>
   <table>
     <thead>
@@ -134,7 +143,7 @@
         <th style="width:80px">Severity<span class="col-resize"></span></th>
         <th style="width:100px">Tag<span class="col-resize"></span></th>
         <th>Message</th>
-        <th style="width:30px"></th>
+        <th style="width:50px"></th>
       </tr>
     </thead>
     <tbody id="log-body">
@@ -204,6 +213,34 @@
       var p = function(n) { return String(n).padStart(2, '0'); };
       return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' +
              p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    // Pause/resume auto-refresh
+    var isPaused = false;
+    function togglePause() {
+      isPaused = !isPaused;
+      var form = document.getElementById('log-form');
+      var btn = document.getElementById('pause-btn');
+      var pauseIcon = document.getElementById('pause-icon');
+      var playIcon = document.getElementById('play-icon');
+      var dot = document.getElementById('status-dot');
+      if (isPaused) {
+        form.setAttribute('hx-trigger', 'submit');
+        btn.classList.add('paused');
+        btn.title = 'Resume auto-refresh';
+        pauseIcon.style.display = 'none';
+        playIcon.style.display = '';
+        dot.style.background = '#ffcc00';
+      } else {
+        form.setAttribute('hx-trigger', 'load, submit, every 3s');
+        btn.classList.remove('paused');
+        btn.title = 'Pause auto-refresh';
+        pauseIcon.style.display = '';
+        playIcon.style.display = 'none';
+        dot.style.background = '#4caf50';
+        htmx.trigger(form, 'submit');
+      }
+      htmx.process(form);
     }
 
     // Pulse green dot on refresh
