@@ -402,7 +402,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="ar-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
         '<div><label>Facility</label><input class="ar-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
-        '<div><label>Tag</label><input class="ar-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '<div><label>Tag (regex)</label><input class="ar-tag" value="' + esc(r.tag) + '" placeholder="optional, e.g. nginx|apache"></div>' +
         '</div>' +
         '<label>Message (regex)</label><input class="ar-message" value="' + esc(r.message) + '" placeholder="optional, e.g. disk.*full">';
       c.appendChild(div);
@@ -426,7 +426,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="ir-host" value="' + esc(r.host) + '"></div>' +
         '<div><label>Facility</label><input class="ir-facility" value="' + esc(r.facility) + '"></div>' +
-        '<div><label>Tag</label><input class="ir-tag" value="' + esc(r.tag) + '"></div>' +
+        '<div><label>Tag (regex)</label><input class="ir-tag" value="' + esc(r.tag) + '" placeholder="e.g. CRON|systemd"></div>' +
         '<div><label>Level</label><select class="ir-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
@@ -454,7 +454,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="sr-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
         '<div><label>Facility</label><input class="sr-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
-        '<div><label>Tag</label><input class="sr-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '<div><label>Tag (regex)</label><input class="sr-tag" value="' + esc(r.tag) + '" placeholder="optional, e.g. nginx|apache"></div>' +
         '<div><label>Level</label><select class="sr-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
@@ -502,6 +502,11 @@
         if (!name) errors.push('Alert rule ' + (i+1) + ': name is required.');
         if (!count || count < 1) errors.push('Alert rule "' + (name||i+1) + '": count must be at least 1.');
         if (!window || window < 1) errors.push('Alert rule "' + (name||i+1) + '": window must be at least 1 minute.');
+        var arTag = g.querySelector('.ar-tag').value;
+        if (arTag) {
+          try { new RegExp(arTag); }
+          catch(e) { errors.push('Alert rule "' + (name||i+1) + '": invalid tag regex.'); }
+        }
         if (message) {
           try { new RegExp(message); }
           catch(e) { errors.push('Alert rule "' + (name||i+1) + '": invalid message regex.'); }
@@ -529,6 +534,10 @@
           message: g.querySelector('.ir-message').value,
           discard: g.querySelector('.ir-discard').checked
         };
+        if (rule.tag) {
+          try { new RegExp(rule.tag); }
+          catch(e) { errors.push('Ignore rule ' + (i+1) + ': invalid tag regex.'); }
+        }
         if (rule.message) {
           try { new RegExp(rule.message); }
           catch(e) { errors.push('Ignore rule ' + (i+1) + ': invalid message regex.'); }
@@ -548,6 +557,10 @@
         };
         if (!rule.new_severity) errors.push('Severity rewrite rule ' + (i+1) + ': new severity is required.');
         if (!rule.host && !rule.facility && !rule.tag && !rule.level && !rule.message) errors.push('Severity rewrite rule ' + (i+1) + ': at least one match field is required.');
+        if (rule.tag) {
+          try { new RegExp(rule.tag); }
+          catch(e) { errors.push('Severity rewrite rule ' + (i+1) + ': invalid tag regex.'); }
+        }
         if (rule.message) {
           try { new RegExp(rule.message); }
           catch(e) { errors.push('Severity rewrite rule ' + (i+1) + ': invalid message regex.'); }
@@ -619,7 +632,11 @@
       }
       if (rule.host && row.dataset.host.toLowerCase() !== rule.host.toLowerCase()) return false;
       if (rule.facility && row.dataset.facility.toLowerCase() !== rule.facility.toLowerCase()) return false;
-      if (rule.tag && row.dataset.tag.toLowerCase() !== rule.tag.toLowerCase()) return false;
+      if (rule.tag) {
+        try {
+          if (!new RegExp(rule.tag, 'i').test(row.dataset.tag)) return false;
+        } catch(e) { return false; }
+      }
       if (rule.message) {
         try {
           if (!new RegExp(rule.message).test(row.dataset.message)) return false;

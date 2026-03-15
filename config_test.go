@@ -114,6 +114,16 @@ func TestValidateConfig_IgnoreEmptyLevelOK(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_IgnoreInvalidTagRegex(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Ignore:    []IgnoreRule{{Tag: "[invalid"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid tag regex")
+	}
+}
+
 func TestValidateConfig_IgnoreInvalidRegex(t *testing.T) {
 	cfg := Config{
 		Retention: 14,
@@ -131,6 +141,16 @@ func TestValidateConfig_IgnoreValidRegex(t *testing.T) {
 	}
 	if err := ValidateConfig(cfg); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidateConfig_AlertInvalidTagRegex(t *testing.T) {
+	cfg := Config{
+		Retention: 14,
+		Alerts:    []AlertRule{{Name: "test", Count: 1, WindowMinutes: 5, Level: "err", Tag: "[invalid"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid tag regex")
 	}
 }
 
@@ -180,6 +200,16 @@ func TestValidateConfig_SeverityRewriteInvalidLevel(t *testing.T) {
 	}
 	if err := ValidateConfig(cfg); err == nil {
 		t.Fatal("expected error for invalid level")
+	}
+}
+
+func TestValidateConfig_SeverityRewriteInvalidTagRegex(t *testing.T) {
+	cfg := Config{
+		Retention:       14,
+		SeverityRewrite: []SeverityRewriteRule{{Tag: "[invalid", NewSeverity: "err"}},
+	}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid tag regex")
 	}
 }
 
