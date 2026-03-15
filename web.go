@@ -50,7 +50,7 @@ type EditableConfig struct {
 func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 	mux := http.NewServeMux()
 
-	pageHTML := strings.Replace(indexHTML, "{{VERSION}}", version, 1)
+	pageHTML := strings.ReplaceAll(indexHTML, "{{VERSION}}", version)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

@@ -1,60 +1,76 @@
-db_path: /data/logyard.db
-retention: 7
-debug: true
-
-listen:
-  udp: ":514"
-  tcp: ":514"
-
-web_addr: ":8080"
-url: "http://localhost:8080"
-
 smtp:
-  host: mailpit
-  port: 1025
-  from: alerts@logyard.local
-  to: admin@logyard.local
-
+    host: mailpit
+    port: 1025
+    user: ""
+    password: ""
+    from: alerts@logyard.local
+    to: admin@logyard.local
 alerts:
-  - name: "high-error-rate"
-    count: 3
-    window_minutes: 5
-    level: err
-
-  - name: "critical-failures"
-    count: 1
-    window_minutes: 10
-    level: crit
-
-  - name: "disk-alerts"
-    count: 1
-    window_minutes: 5
-    level: err
-    message: "disk.*full|no space"
-
-  - name: "auth-failures"
-    count: 5
-    window_minutes: 10
-    level: warning
-    tag: sshd
-
+    - name: high-error-rate
+      count: 3
+      window_minutes: 5
+      level: err
+      above: false
+    - name: critical-failures
+      count: 1
+      window_minutes: 10
+      level: crit
+      above: false
+    - name: disk-alerts
+      count: 1
+      window_minutes: 5
+      level: err
+      above: false
+      message: disk.*full|no space
+    - name: auth-failures
+      count: 5
+      window_minutes: 10
+      level: warning
+      above: false
+      tag: sshd
 ignore:
-  - tag: healthcheck
-  - message: "routine maintenance"
-
+    - host: ""
+      facility: ""
+      tag: healthcheck
+      level: ""
+      message: ""
+      discard: false
+    - host: ""
+      facility: ""
+      tag: ""
+      level: ""
+      message: routine maintenance
+      discard: false
+    - host: db2
+      facility: user
+      tag: myapp
+      level: err
+      message: 'WARN slow query detected: SELECT u\.id, u\.name, u\.email, o\.id, o\.total, o\.status, p\.name, p\.price, oi\.quantity FROM users u JOIN orders o ON u\.id = o\.user_id JOIN order_items oi ON o\.id = oi\.order_id JOIN products p ON oi\.product_id = p\.id WHERE o\.created_at > ''2026-01-01'' AND o\.status IN \(''pending'', ''processing'', ''shipped''\) AND u\.active = true ORDER BY o\.created_at DESC LIMIT 1000 -- execution_time=12847ms rows_examined=2847593 rows_sent=1000 lock_time=234ms tmp_tables=3'
+      discard: false
 severity_rewrite:
-  - tag: myapp
-    level: info
-    message: "ERROR|FATAL"
-    new_severity: err
-  - tag: myapp
-    level: info
-    message: "WARN"
-    new_severity: warning
-
+    - host: ""
+      facility: ""
+      tag: myapp
+      level: info
+      message: ERROR|FATAL
+      new_severity: err
+    - host: ""
+      facility: ""
+      tag: myapp
+      level: info
+      message: WARN
+      new_severity: warning
+retention: 7
 digest:
-  enabled: true
-  initial: "1m"
-  multiplier: 2
-  max: "10m"
-  cooldown: "3m"
+    enabled: true
+    initial: 1m
+    multiplier: 2
+    max: 10m
+    cooldown: 3m
+debug: true
+db_path: /data/logyard.db
+listen:
+    udp: :514
+    tcp: :514
+web_addr: :8080
+url: http://localhost:8080
