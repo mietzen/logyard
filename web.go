@@ -25,7 +25,7 @@ var rowsTemplate = template.Must(template.New("rows").Parse(`
   <td>{{.Facility}}</td>
   <td>{{.Severity}}</td>
   <td>{{.Tag}}</td>
-  <td>{{.Message}}</td>
+  <td class="msg-cell">{{.Message}}</td>
   <td class="action-cell"></td>
 </tr>
 {{- end -}}

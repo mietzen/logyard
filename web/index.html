@@ -41,6 +41,8 @@
     .sev-notice { color: #66ccff; }
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
+    .msg-cell { cursor: pointer; }
+    .msg-cell.expanded { white-space: normal; word-break: break-word; }
     .action-cell { width: 30px; text-align: center; padding: 2px 4px !important; overflow: visible; }
     .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
     .action-cell .icon-btn:hover svg { fill: #e94560; }
@@ -689,6 +691,11 @@
 
     document.body.addEventListener('htmx:afterSwap', function(e) {
       if (e.detail.target.id === 'log-body') addBellOffIcons();
+    });
+
+    document.getElementById('log-body').addEventListener('click', function(e) {
+      var td = e.target.closest('td.msg-cell');
+      if (td) td.classList.toggle('expanded');
     });
 
     function escapeRegex(s) {
