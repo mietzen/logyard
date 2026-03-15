@@ -41,8 +41,7 @@
     .sev-notice { color: #66ccff; }
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
-    .msg-cell { cursor: pointer; }
-    .msg-cell.expanded { white-space: normal; word-break: break-word; }
+    .msg-cell { white-space: normal; word-break: break-word; }
     .action-cell { width: 55px; text-align: center; padding: 2px 4px !important; overflow: visible; white-space: nowrap; display: flex; gap: 2px; justify-content: center; align-items: center; }
     .copy-btn svg { width: 14px; height: 14px; fill: #a0a0a0; vertical-align: middle; }
     .copy-btn:hover svg { fill: #66ccff; }
@@ -709,10 +708,7 @@
           btn.querySelector('svg').style.fill = '#4caf50';
           setTimeout(function() { btn.querySelector('svg').style.fill = ''; }, 1000);
         });
-        return;
       }
-      var td = e.target.closest('td.msg-cell');
-      if (td) td.classList.toggle('expanded');
     });
 
     function escapeRegex(s) {
