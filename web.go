@@ -87,7 +87,7 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 
 		limit := 200
 		if v := q.Get("limit"); v != "" {
-			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
 				limit = parsed
 			}
 		}
