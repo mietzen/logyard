@@ -25,6 +25,11 @@
     .filters .btn-filter:hover { background: #1a4a7a; }
     .filters .btn-reset { background: #333; color: #e0e0e0; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
     .filters .btn-reset:hover { background: #444; }
+    .btn-pause { background: #333; border: none; padding: 6px 8px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; }
+    .btn-pause svg { fill: #e0e0e0; }
+    .btn-pause:hover svg { fill: #66ccff; }
+    .btn-pause.paused { background: #4a2800; }
+    .btn-pause.paused svg { fill: #ffcc00; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     thead { position: sticky; top: 0; background: #16213e; z-index: 1; }
     th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #0f3460; border-right: 1px solid #0f3460; font-weight: 600; color: #a0a0a0; font-size: 11px; text-transform: uppercase; position: relative; }
@@ -41,9 +46,12 @@
     .sev-notice { color: #66ccff; }
     .sev-info { color: #e0e0e0; }
     .sev-debug { color: #888888; }
-    .action-cell { width: 30px; text-align: center; padding: 2px 4px !important; overflow: visible; }
+    .msg-cell { white-space: normal; word-break: break-word; }
+    .action-cell { white-space: nowrap; text-align: center; padding: 2px 4px !important; overflow: visible; }
+    .action-cell .icon-btn { vertical-align: middle; margin: 0 1px; }
     .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
     .action-cell .icon-btn:hover svg { fill: #e94560; }
+    .copy-btn:hover svg { fill: #66ccff !important; }
 
     /* Settings modal */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: flex-start; padding-top: 60px; }
@@ -112,8 +120,19 @@
     <input id="filter-since-visible" type="datetime-local" style="display:none">
     <input id="filter-until-visible" type="datetime-local" style="display:none">
     <input name="search" placeholder="Search message..." autocomplete="off" style="flex:1;min-width:200px">
+    <select name="limit" id="filter-limit">
+      <option value="200" selected>200 rows</option>
+      <option value="500">500 rows</option>
+      <option value="1000">1000 rows</option>
+      <option value="5000">5000 rows</option>
+      <option value="0">Unlimited</option>
+    </select>
     <button type="submit" class="btn-filter">Filter</button>
     <button type="button" class="btn-reset" onclick="resetFilters()">Reset</button>
+    <button type="button" class="btn-pause" id="pause-btn" onclick="togglePause()" title="Pause auto-refresh">
+      <svg id="pause-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+      <svg id="play-icon" viewBox="0 0 24 24" width="14" height="14" style="display:none"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+    </button>
   </form>
   <table>
     <thead>
@@ -124,7 +143,7 @@
         <th style="width:80px">Severity<span class="col-resize"></span></th>
         <th style="width:100px">Tag<span class="col-resize"></span></th>
         <th>Message</th>
-        <th style="width:30px"></th>
+        <th style="width:50px"></th>
       </tr>
     </thead>
     <tbody id="log-body">
@@ -194,6 +213,34 @@
       var p = function(n) { return String(n).padStart(2, '0'); };
       return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' +
              p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    // Pause/resume auto-refresh
+    var isPaused = false;
+    function togglePause() {
+      isPaused = !isPaused;
+      var form = document.getElementById('log-form');
+      var btn = document.getElementById('pause-btn');
+      var pauseIcon = document.getElementById('pause-icon');
+      var playIcon = document.getElementById('play-icon');
+      var dot = document.getElementById('status-dot');
+      if (isPaused) {
+        form.setAttribute('hx-trigger', 'submit');
+        btn.classList.add('paused');
+        btn.title = 'Resume auto-refresh';
+        pauseIcon.style.display = 'none';
+        playIcon.style.display = '';
+        dot.style.background = '#ffcc00';
+      } else {
+        form.setAttribute('hx-trigger', 'load, submit, every 3s');
+        btn.classList.remove('paused');
+        btn.title = 'Pause auto-refresh';
+        pauseIcon.style.display = '';
+        playIcon.style.display = 'none';
+        dot.style.background = '#4caf50';
+        htmx.trigger(form, 'submit');
+      }
+      htmx.process(form);
     }
 
     // Pulse green dot on refresh
@@ -319,6 +366,7 @@
       document.getElementById('filter-tag').value = '';
       document.getElementById('time-preset').value = '5';
       document.querySelector('input[name="search"]').value = '';
+      document.getElementById('filter-limit').value = '200';
       handleTimePreset('5');
       loadFilters();
       htmx.trigger(document.getElementById('log-form'), 'submit');
@@ -402,7 +450,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="ar-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
         '<div><label>Facility</label><input class="ar-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
-        '<div><label>Tag</label><input class="ar-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '<div><label>Tag (regex)</label><input class="ar-tag" value="' + esc(r.tag) + '" placeholder="optional, e.g. nginx|apache"></div>' +
         '</div>' +
         '<label>Message (regex)</label><input class="ar-message" value="' + esc(r.message) + '" placeholder="optional, e.g. disk.*full">';
       c.appendChild(div);
@@ -426,7 +474,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="ir-host" value="' + esc(r.host) + '"></div>' +
         '<div><label>Facility</label><input class="ir-facility" value="' + esc(r.facility) + '"></div>' +
-        '<div><label>Tag</label><input class="ir-tag" value="' + esc(r.tag) + '"></div>' +
+        '<div><label>Tag (regex)</label><input class="ir-tag" value="' + esc(r.tag) + '" placeholder="e.g. CRON|systemd"></div>' +
         '<div><label>Level</label><select class="ir-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
@@ -454,7 +502,7 @@
         '<div class="field-row">' +
         '<div><label>Host</label><input class="sr-host" value="' + esc(r.host) + '" placeholder="optional"></div>' +
         '<div><label>Facility</label><input class="sr-facility" value="' + esc(r.facility) + '" placeholder="optional"></div>' +
-        '<div><label>Tag</label><input class="sr-tag" value="' + esc(r.tag) + '" placeholder="optional"></div>' +
+        '<div><label>Tag (regex)</label><input class="sr-tag" value="' + esc(r.tag) + '" placeholder="optional, e.g. nginx|apache"></div>' +
         '<div><label>Level</label><select class="sr-level"><option value="">Any</option>' + severityOptions(r.level) + '</select></div>' +
         '</div>' +
         '<div class="field-row">' +
@@ -502,6 +550,11 @@
         if (!name) errors.push('Alert rule ' + (i+1) + ': name is required.');
         if (!count || count < 1) errors.push('Alert rule "' + (name||i+1) + '": count must be at least 1.');
         if (!window || window < 1) errors.push('Alert rule "' + (name||i+1) + '": window must be at least 1 minute.');
+        var arTag = g.querySelector('.ar-tag').value;
+        if (arTag) {
+          try { new RegExp(arTag); }
+          catch(e) { errors.push('Alert rule "' + (name||i+1) + '": invalid tag regex.'); }
+        }
         if (message) {
           try { new RegExp(message); }
           catch(e) { errors.push('Alert rule "' + (name||i+1) + '": invalid message regex.'); }
@@ -529,6 +582,10 @@
           message: g.querySelector('.ir-message').value,
           discard: g.querySelector('.ir-discard').checked
         };
+        if (rule.tag) {
+          try { new RegExp(rule.tag); }
+          catch(e) { errors.push('Ignore rule ' + (i+1) + ': invalid tag regex.'); }
+        }
         if (rule.message) {
           try { new RegExp(rule.message); }
           catch(e) { errors.push('Ignore rule ' + (i+1) + ': invalid message regex.'); }
@@ -548,6 +605,10 @@
         };
         if (!rule.new_severity) errors.push('Severity rewrite rule ' + (i+1) + ': new severity is required.');
         if (!rule.host && !rule.facility && !rule.tag && !rule.level && !rule.message) errors.push('Severity rewrite rule ' + (i+1) + ': at least one match field is required.');
+        if (rule.tag) {
+          try { new RegExp(rule.tag); }
+          catch(e) { errors.push('Severity rewrite rule ' + (i+1) + ': invalid tag regex.'); }
+        }
         if (rule.message) {
           try { new RegExp(rule.message); }
           catch(e) { errors.push('Severity rewrite rule ' + (i+1) + ': invalid message regex.'); }
@@ -619,7 +680,11 @@
       }
       if (rule.host && row.dataset.host.toLowerCase() !== rule.host.toLowerCase()) return false;
       if (rule.facility && row.dataset.facility.toLowerCase() !== rule.facility.toLowerCase()) return false;
-      if (rule.tag && row.dataset.tag.toLowerCase() !== rule.tag.toLowerCase()) return false;
+      if (rule.tag) {
+        try {
+          if (!new RegExp(rule.tag, 'i').test(row.dataset.tag)) return false;
+        } catch(e) { return false; }
+      }
       if (rule.message) {
         try {
           if (!new RegExp(rule.message).test(row.dataset.message)) return false;
@@ -635,7 +700,8 @@
       rows.forEach(function(row) {
         var cell = row.querySelector('.action-cell');
         if (!cell) return;
-        cell.innerHTML = '';
+        var existingBell = cell.querySelector('.bell-btn');
+        if (existingBell) existingBell.remove();
         var matched = false;
         for (var i = 0; i < cachedAlertRules.length; i++) {
           if (rowMatchesAlertRule(row, cachedAlertRules[i])) {
@@ -645,7 +711,7 @@
         }
         if (matched) {
           var btn = document.createElement('button');
-          btn.className = 'icon-btn';
+          btn.className = 'icon-btn bell-btn';
           btn.title = 'Create ignore rule';
           btn.innerHTML = bellOffSVG;
           btn.addEventListener('click', function(e) {
@@ -658,13 +724,28 @@
               message: row.dataset.message
             });
           });
-          cell.appendChild(btn);
+          var copyBtn = cell.querySelector('.copy-btn');
+          cell.insertBefore(btn, copyBtn);
         }
       });
     }
 
     document.body.addEventListener('htmx:afterSwap', function(e) {
       if (e.detail.target.id === 'log-body') addBellOffIcons();
+    });
+
+    document.getElementById('log-body').addEventListener('click', function(e) {
+      var btn = e.target.closest('.copy-btn');
+      if (btn) {
+        e.stopPropagation();
+        var row = btn.closest('tr');
+        var ts = row.querySelector('td').textContent;
+        var text = ts + ' ' + row.dataset.host + ' ' + row.dataset.facility + '.' + row.dataset.severity + ' ' + row.dataset.tag + ': ' + row.dataset.message;
+        navigator.clipboard.writeText(text).then(function() {
+          btn.querySelector('svg').style.fill = '#4caf50';
+          setTimeout(function() { btn.querySelector('svg').style.fill = ''; }, 1000);
+        });
+      }
     });
 
     function escapeRegex(s) {

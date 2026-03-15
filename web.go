@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 //go:embed web/index.html
@@ -24,8 +25,8 @@ var rowsTemplate = template.Must(template.New("rows").Parse(`
   <td>{{.Facility}}</td>
   <td>{{.Severity}}</td>
   <td>{{.Tag}}</td>
-  <td>{{.Message}}</td>
-  <td class="action-cell"></td>
+  <td class="msg-cell">{{.Message}}</td>
+  <td class="action-cell"><button class="icon-btn copy-btn" title="Copy message"><svg viewBox="0 0 24 24"><path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/></svg></button></td>
 </tr>
 {{- end -}}
 `))
@@ -84,7 +85,17 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			Until:    q.Get("until"),
 		}
 
-		entries, err := QueryLogs(db, filter, 200)
+		limit := 200
+		if v := q.Get("limit"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+				limit = parsed
+			}
+		}
+		if filter.Since != "" && filter.Until != "" {
+			limit = 0
+		}
+
+		entries, err := QueryLogs(db, filter, limit)
 		if err != nil {
 			log.Printf("query error: %v", err)
 			http.Error(w, "query failed", http.StatusInternalServerError)

@@ -58,6 +58,13 @@ ERR_MESSAGES=(
     "no space left on device"
 )
 
+LONG_MESSAGES=(
+    "ERROR: unhandled exception in module auth.middleware at line 847: TypeError: Cannot read properties of undefined (reading 'session') | stack: at AuthMiddleware.handle (/app/src/middleware/auth.js:847:23) at Layer.handle (/app/node_modules/express/lib/router/layer.js:95:5) at next (/app/node_modules/express/lib/router/route.js:144:13) at Route.dispatch (/app/node_modules/express/lib/router/route.js:114:3) at Layer.handle (/app/node_modules/express/lib/router/layer.js:95:5) | request_id=a1b2c3d4-e5f6-7890-abcd-ef1234567890 user_agent=Mozilla/5.0 ip=10.0.45.12"
+    "WARN slow query detected: SELECT u.id, u.name, u.email, o.id, o.total, o.status, p.name, p.price, oi.quantity FROM users u JOIN orders o ON u.id = o.user_id JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE o.created_at > '2026-01-01' AND o.status IN ('pending', 'processing', 'shipped') AND u.active = true ORDER BY o.created_at DESC LIMIT 1000 -- execution_time=12847ms rows_examined=2847593 rows_sent=1000 lock_time=234ms tmp_tables=3"
+    "INFO [deployment] Rolling update completed for service api-gateway: replicas 5/5 ready | previous_version=v2.14.3 new_version=v2.15.0 strategy=rolling max_unavailable=1 max_surge=2 | health_checks: pod/api-gateway-7d8f9b6c4-xk2nm=healthy pod/api-gateway-7d8f9b6c4-j9m3p=healthy pod/api-gateway-7d8f9b6c4-q4r7t=healthy pod/api-gateway-7d8f9b6c4-w2v5x=healthy pod/api-gateway-7d8f9b6c4-a8b1c=healthy | total_duration=4m32s zero_downtime=true"
+    "FATAL OOM killer invoked: process postgres (pid=28471) killed, score=847, total_vm=8294612kB, rss=6182940kB, pgtables=12108kB, oom_score_adj=0 | system memory: total=16384MB used=15987MB free=42MB available=397MB swap_total=0MB swap_used=0MB | cgroup: memory.limit_in_bytes=8589934592 memory.usage_in_bytes=8589934590 memory.max_usage_in_bytes=8589934592"
+)
+
 CRIT_MESSAGES=(
     "CRITICAL: primary database unreachable"
     "system panic: kernel stack overflow"
@@ -132,6 +139,17 @@ while true; do
             send_rfc5424 "<${PRI_CRIT}>1 ${BTS} ${BHOST} postgres - - - ${BMSG}"
         fi
 
+        continue
+    fi
+
+    # Every 10 messages, send a long message
+    if [ $((COUNTER % 10)) -eq 0 ]; then
+        LMSG=${LONG_MESSAGES[$((RANDOM % ${#LONG_MESSAGES[@]}))]}
+        LTS=$(date '+%b %d %H:%M:%S')
+        LHOST=${HOSTS[$((RANDOM % ${#HOSTS[@]}))]}
+        LTAG=${TAGS[$((RANDOM % ${#TAGS[@]}))]}
+        send_rfc3164 "<${PRI_ERR}>${LTS} ${LHOST} ${LTAG}: ${LMSG}"
+        sleep 1
         continue
     fi
 

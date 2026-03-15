@@ -247,6 +247,11 @@ func ValidateConfig(cfg Config) error {
 		if !validLevels[rule.Level] {
 			return fmt.Errorf("alert rule %q: invalid level %q", rule.Name, rule.Level)
 		}
+		if rule.Tag != "" {
+			if _, err := regexp.Compile(rule.Tag); err != nil {
+				return fmt.Errorf("alert rule %q: invalid tag regex: %w", rule.Name, err)
+			}
+		}
 		if rule.Message != "" {
 			if _, err := regexp.Compile(rule.Message); err != nil {
 				return fmt.Errorf("alert rule %q: invalid message regex: %w", rule.Name, err)
@@ -256,6 +261,11 @@ func ValidateConfig(cfg Config) error {
 	for i, rule := range cfg.Ignore {
 		if rule.Level != "" && !validLevels[rule.Level] {
 			return fmt.Errorf("ignore rule %d: invalid level %q", i, rule.Level)
+		}
+		if rule.Tag != "" {
+			if _, err := regexp.Compile(rule.Tag); err != nil {
+				return fmt.Errorf("ignore rule %d: invalid tag regex: %w", i, err)
+			}
 		}
 		if rule.Message != "" {
 			if _, err := regexp.Compile(rule.Message); err != nil {
@@ -272,6 +282,11 @@ func ValidateConfig(cfg Config) error {
 		}
 		if rule.Level != "" && !validLevels[rule.Level] {
 			return fmt.Errorf("severity rewrite rule %d: invalid level %q", i, rule.Level)
+		}
+		if rule.Tag != "" {
+			if _, err := regexp.Compile(rule.Tag); err != nil {
+				return fmt.Errorf("severity rewrite rule %d: invalid tag regex: %w", i, err)
+			}
 		}
 		if rule.Message != "" {
 			if _, err := regexp.Compile(rule.Message); err != nil {

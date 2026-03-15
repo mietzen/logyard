@@ -89,8 +89,11 @@ func matchesRewriteRule(rule SeverityRewriteRule, host, facility, severity, tag,
 	if rule.Level != "" && rule.Level != severity {
 		return false
 	}
-	if rule.Tag != "" && rule.Tag != tag {
-		return false
+	if rule.Tag != "" {
+		matched, err := regexp.MatchString(rule.Tag, tag)
+		if err != nil || !matched {
+			return false
+		}
 	}
 	if rule.Message != "" {
 		matched, err := regexp.MatchString(rule.Message, message)
@@ -111,8 +114,11 @@ func matchesIgnoreRule(rule IgnoreRule, host, facility, severity, tag, message s
 	if rule.Level != "" && rule.Level != severity {
 		return false
 	}
-	if rule.Tag != "" && rule.Tag != tag {
-		return false
+	if rule.Tag != "" {
+		matched, err := regexp.MatchString(rule.Tag, tag)
+		if err != nil || !matched {
+			return false
+		}
 	}
 	if rule.Message != "" {
 		matched, err := regexp.MatchString(rule.Message, message)
