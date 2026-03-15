@@ -1,6 +1,9 @@
 services:
   logyard:
-    build: .
+    build:
+      context: .
+      args:
+        - VERSION=1.5.0
     container_name: logyard-dev
     ports:
       - "1514:514/udp"

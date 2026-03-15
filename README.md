@@ -2,11 +2,7 @@
 
 A lightweight syslog aggregator with web UI and email alerting. Single Go binary, SQLite storage, no external dependencies. Accepts both RFC 3164 (BSD) and RFC 5424 syslog messages over UDP and TCP.
 
-![Gif of Logyards log console](assets/censored-console.gif)
-
----
-
-![Gif of Logyards settings](assets/settings.gif)
+![Gif of Logyards log console](assets/logyard-demo.gif)
 
 ---
 
@@ -320,3 +316,7 @@ Stop the stack with:
 ```shell
 docker compose -f docker-compose.dev.yaml down -v
 ```
+
+## Credits
+
+Icons by [Pictogrammers](https://pictogrammers.com/) (Material Design Icons), licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
