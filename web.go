@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 //go:embed web/index.html
@@ -84,7 +85,17 @@ func StartWeb(addr string, db *sql.DB, cm *ConfigManager) error {
 			Until:    q.Get("until"),
 		}
 
-		entries, err := QueryLogs(db, filter, 200)
+		limit := 200
+		if v := q.Get("limit"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+		if filter.Since != "" && filter.Until != "" {
+			limit = 0
+		}
+
+		entries, err := QueryLogs(db, filter, limit)
 		if err != nil {
 			log.Printf("query error: %v", err)
 			http.Error(w, "query failed", http.StatusInternalServerError)

@@ -112,6 +112,12 @@
     <input id="filter-since-visible" type="datetime-local" style="display:none">
     <input id="filter-until-visible" type="datetime-local" style="display:none">
     <input name="search" placeholder="Search message..." autocomplete="off" style="flex:1;min-width:200px">
+    <select name="limit" id="filter-limit">
+      <option value="200" selected>200 rows</option>
+      <option value="500">500 rows</option>
+      <option value="1000">1000 rows</option>
+      <option value="5000">5000 rows</option>
+    </select>
     <button type="submit" class="btn-filter">Filter</button>
     <button type="button" class="btn-reset" onclick="resetFilters()">Reset</button>
   </form>
@@ -319,6 +325,7 @@
       document.getElementById('filter-tag').value = '';
       document.getElementById('time-preset').value = '5';
       document.querySelector('input[name="search"]').value = '';
+      document.getElementById('filter-limit').value = '200';
       handleTimePreset('5');
       loadFilters();
       htmx.trigger(document.getElementById('log-form'), 'submit');

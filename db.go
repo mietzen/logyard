@@ -149,8 +149,11 @@ func QueryLogs(db *sql.DB, filter LogFilter, limit int) ([]LogEntry, error) {
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY id DESC LIMIT ?"
-	args = append(args, limit)
+	query += " ORDER BY id DESC"
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
