@@ -43,7 +43,7 @@
     .sev-debug { color: #888888; }
     .msg-cell { cursor: pointer; }
     .msg-cell.expanded { white-space: normal; word-break: break-word; }
-    .action-cell { width: 55px; text-align: center; padding: 2px 4px !important; overflow: visible; white-space: nowrap; }
+    .action-cell { width: 55px; text-align: center; padding: 2px 4px !important; overflow: visible; white-space: nowrap; display: flex; gap: 2px; justify-content: center; align-items: center; }
     .copy-btn svg { width: 14px; height: 14px; fill: #a0a0a0; vertical-align: middle; }
     .copy-btn:hover svg { fill: #66ccff; }
     .action-cell .icon-btn svg { width: 14px; height: 14px; fill: #a0a0a0; }
@@ -688,7 +688,8 @@
               message: row.dataset.message
             });
           });
-          cell.appendChild(btn);
+          var copyBtn = cell.querySelector('.copy-btn');
+          cell.insertBefore(btn, copyBtn);
         }
       });
     }
@@ -702,8 +703,9 @@
       if (btn) {
         e.stopPropagation();
         var row = btn.closest('tr');
-        var msg = row.dataset.message;
-        navigator.clipboard.writeText(msg).then(function() {
+        var ts = row.querySelector('td').textContent;
+        var text = ts + ' ' + row.dataset.host + ' ' + row.dataset.facility + '.' + row.dataset.severity + ' ' + row.dataset.tag + ': ' + row.dataset.message;
+        navigator.clipboard.writeText(text).then(function() {
           btn.querySelector('svg').style.fill = '#4caf50';
           setTimeout(function() { btn.querySelector('svg').style.fill = ''; }, 1000);
         });
